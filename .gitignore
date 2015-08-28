@@ -2,6 +2,7 @@ tpose
 checkHash.sh
 data*
 test*
+*.txt
 *.o
 .DS_Store
 .DS_Store?
