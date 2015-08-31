@@ -178,13 +178,13 @@ int main(
 			abort();
 		}
 
-		fprintf(stdout, "A delimiter character has been specified\n");
+		//fprintf(stdout, "A delimiter character has been specified\n");
 		delimiter = (char) delimiterArg[0];
 		delimiterSpecified = true;
 	}
 
 	if (!delimiterSpecified) {
-		fprintf(stdout, "A delimiter character has not been specified\n");
+		//fprintf(stdout, "A delimiter character has not been specified\n");
 		delimiter = '\t';
 	}
 
@@ -201,21 +201,33 @@ int main(
 
 
 	/* Event-loop */
-	printf("\n");
-	TposeFile* tposeInputFile = tposeIOOpenFile(inputFilePath, delimiter);
+	//printf("\n");
+	TposeInputFile* tposeInputFile = tposeIOOpenInputFile(inputFilePath, delimiter);
+	//TposeOutputFile* tposeOutputFile = tposeIOOpenInputFile(inputFilePath, delimiter);
 	TposeQuery* tposeQuery = tposeIOQueryAlloc(tposeInputFile, idArg, groupArg, numericArg);
-	printf("\n");
+	BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+	//printf("\n");
 
+	//printf("\n");
+	TposeHeader* outputHeader = tposeIOgetUniqueGroups(tposeQuery, btree);
+	TposeAggregator* aggregator = tposeIOAggregatorAlloc(outputHeader->numFields);
 	
-	printf("\n");
-	tposeIOgetUniqueGroups(tposeQuery);
-	printf("\n");
+	//printf("\n");
+	tposeIOTransposeGroup(tposeQuery, outputHeader, aggregator, btree);
+	
+	int z;
+	for(z = 0; z < aggregator->numFields; ++z)
+		printf("%s = %f\n", outputHeader->fields[z], aggregator->aggregates[z]); 
 
-
-	printf("\n");
+	//printf("\n");
+	
+	//Clean-up
+	btreeFree(&btree);
+	tposeIOAggregatorFree(&aggregator);
+	tposeIOHeaderFree(&outputHeader);
 	tposeIOQueryFree(&tposeQuery);
-	tposeIOCloseFile(tposeInputFile);
-	printf("\n");
+	tposeIOCloseInputFile(tposeInputFile);
+	//printf("\n");
 	
 	/*printf("sizeof(char) = %u\n", sizeof(char) );
 	printf("sizeof(long) = %u\n", sizeof(long) );

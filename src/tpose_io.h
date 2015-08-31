@@ -31,6 +31,8 @@
 	#include <error.h>
 	#include <errno.h>
 
+	#include "btree.h"
+
 
 	/**
 	 ** Implementation limits
@@ -50,14 +52,18 @@
 		unsigned int numFields;
 	} TposeHeader;
 
-	/**
-	 ** TposeLine
-	 **/
-	typedef struct {
-	} TposeLine;
 
 	/**
-	 ** TposeFile
+	 ** TposeAggregator
+	 **/
+	typedef struct {
+		double* aggregates;
+		unsigned int numFields;
+	} TposeAggregator;
+
+
+	/**
+	 ** TposeInputFile
 	 **/
 	typedef struct {
 		int fd;
@@ -68,37 +74,61 @@
 		//size_t pageSize;
 		
 		TposeHeader* fileHeader;
-	} TposeFile;
+	} TposeInputFile;
+
+	/**
+	 ** TposeOutputFile
+	 **/
+	typedef struct {
+		int fd;
+		char* fileAddr;
+		unsigned char fieldDelimiter;
+		TposeHeader* fileHeader;
+	} TposeOutputFile;
 
 	/**
 	 ** TposeQuery
 	 **/
 	typedef struct {
-		TposeFile* tposeInputFile;
-		//TposeFile* tposeOutputFile;
+		TposeInputFile* inputFile;
+		//TposeInputFile* tposeOutputFile;
 		int id;
 		int group;
 		int numeric;
 	} TposeQuery;
 
 
-	/* tpose io */
-	TposeFile* tposeIOOpenFile(char* filePath, unsigned char fieldDelimiter);
-	int tposeIOCloseFile(TposeFile* tposeFile);
+	/* interface */
+	/* input */
+	TposeInputFile* tposeIOOpenInputFile(char* filePath, unsigned char fieldDelimiter);
+	int tposeIOCloseInputFile(TposeInputFile* tposeFile);
 
-	TposeHeader* tposeIOReadHeader(TposeFile* tposeFile);
+	TposeHeader* tposeIOReadInputHeader(TposeInputFile* tposeFile);
 
-	TposeFile* tposeIOFileAlloc(int fd, char* fileAddr, size_t fileSize, unsigned char fieldDelimiter);
-	void tposeIOFileFree(TposeFile** tposeFilePtr);
+	TposeInputFile* tposeIOInputFileAlloc(int fd, char* fileAddr, size_t fileSize, unsigned char fieldDelimiter);
+	void tposeIOInputFileFree(TposeInputFile** tposeFilePtr);
 
+
+	/* output */
+	TposeOutputFile* tposeIOOpenOutFile(char* filePath, unsigned char fieldDelimiter);
+	int tposeIOCloseOutputFile(TposeOutputFile* tposeFile);
+
+
+	/* input/output */
 	TposeHeader* tposeIOHeaderAlloc(unsigned int numFields);
 	void tposeIOHeaderFree(TposeHeader** tposeHeaderPtr);
 
-	TposeQuery* tposeIOQueryAlloc(TposeFile* tposeFile, char* idVar, char* groupVar, char* numericVar);
+	TposeAggregator* tposeIOAggregatorAlloc(unsigned int numFields);
+	void tposeIOAggregatorFree(TposeAggregator** tposeAggregatorPtr);
+
+	TposeQuery* tposeIOQueryAlloc(TposeInputFile* inputFile, char* idVar, char* groupVar, char* numericVar);
 	void tposeIOQueryFree(TposeQuery** tposeQueryPtr);
 
-	//int tposeIOgetFieldIndex(TposeHeader* tposeHeader, char* field);
-	TposeHeader* tposeIOgetUniqueGroups(TposeQuery* tposeQuery);
+
+	/* util */
+	TposeHeader* tposeIOgetUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
+	void tposeIOTransposeGroup(TposeQuery* tposeQuery, TposeHeader* outputHeader, TposeAggregator* aggregates, BTree* btree);
+	//int tposeIOgetFieldIndex(TposeHeader* tposeHeader, char* field); 
 
 
 #endif /* TPOSE_IO_H */
