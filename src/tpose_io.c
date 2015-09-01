@@ -20,7 +20,7 @@
 //#include "btree.h"
 
 char* rowDelimiter = "\n";
-
+extern int errno;
 
 /** 
  ** Return the integer index of the field parameter 
@@ -34,15 +34,23 @@ int getFieldIndex(
 	if(field == NULL)
 		return -1;
 	
+	int numFields;
+	if(!tposeHeader->numFields)
+		numFields = tposeHeader->maxFields;
+	else
+		numFields = tposeHeader->numFields; // To limit iterating more than needed
+
+//	printf("getFieldIndex numFields = %d\n", numFields);
+
 	int i;
-	for(i=0; i<tposeHeader->numFields; i++) {
+	for(i = 0; i < numFields; i++) {
 		if(!strcmp(field, *(tposeHeader->fields+i))) {
-			//printf("i = %d\n", i);
+//			printf("i = %d\n", i);
 			break;
 		}
 	}
 
-	//printf("broken out @ i = %d\n", i);
+//	printf("broken out @ i = %d\n", i);
 
 	return i; 
 	
@@ -51,7 +59,7 @@ int getFieldIndex(
 
 
 /** 
- ** Allocates memory for the input file headers arrays 
+ ** Allocates memory for the input file
  **/
 TposeInputFile* tposeIOInputFileAlloc(
 	int fd
@@ -60,25 +68,26 @@ TposeInputFile* tposeIOInputFileAlloc(
 	,unsigned char fieldDelimiter
 ) {
 
-	TposeInputFile* tposeFile;
+	TposeInputFile* inputFile;
 
 	/* Allocate memory for the field names */
-	if((tposeFile = (TposeInputFile*) malloc(sizeof(TposeInputFile))) == NULL ) {
+	if((inputFile = (TposeInputFile*) malloc(sizeof(TposeInputFile))) == NULL ) {
 		printf("tposeIOFileAlloc: malloc error\n");
 		return NULL;
 	}
 
-	tposeFile->fd = fd;
-	tposeFile->fileAddr = fileAddr;
-	tposeFile->fileSize = fileSize;
-	tposeFile->fieldDelimiter = fieldDelimiter;
+	inputFile->fd = fd;
+	inputFile->fileAddr = fileAddr;
+	inputFile->fileSize = fileSize;
+	inputFile->fieldDelimiter = fieldDelimiter;
+	inputFile->fileHeader = NULL;
 	
-	//assert(tposeFile->fd != NULL);
-	assert(tposeFile->fileAddr != NULL);
-	assert(tposeFile->fileSize != 0);
+	assert(inputFile->fd > 0);
+	assert(inputFile->fileAddr != NULL);
+	assert(inputFile->fileSize != 0);
 	//assert(tposeFile->fieldDelimiter != '');
 
-	return tposeFile;
+	return inputFile;
 	
 }
 
@@ -88,19 +97,74 @@ TposeInputFile* tposeIOInputFileAlloc(
  ** Free memory for a TposeInputFile 
  **/
 void tposeIOInputFileFree(
-    TposeInputFile** tposeFilePtr
+    TposeInputFile** inputFilePtr
 ) {
 
 	//printf("tposeIOFileFree: Freeing TposeInputFile memory...\n");
 
-	tposeIOHeaderFree(&((*tposeFilePtr)->fileHeader));
+	tposeIOHeaderFree(&((*inputFilePtr)->fileHeader));
     
-   if(*tposeFilePtr != NULL) {
-       free(*tposeFilePtr);
-       *tposeFilePtr = NULL;
+   if(*inputFilePtr != NULL) {
+       free(*inputFilePtr);
+       *inputFilePtr = NULL;
    }
 
-   assert(*tposeFilePtr == NULL);
+   assert(*inputFilePtr == NULL);
+   //printf("tposeIOFileFree: TposeInputFile has been freed!\n");
+}
+
+
+
+/** 
+ ** Allocates memory for the output file
+ **/
+TposeOutputFile* tposeIOOutputFileAlloc(
+	//int fd
+	FILE* fd
+	,unsigned char fieldDelimiter
+) {
+
+	TposeOutputFile* outputFile;
+
+	/* Allocate memory for the field names */
+	if((outputFile = (TposeOutputFile*) malloc(sizeof(TposeOutputFile))) == NULL ) {
+		printf("tposeIOOutputFileAlloc: malloc error\n");
+		return NULL;
+	}
+
+	outputFile->fd = fd;
+	outputFile->fieldDelimiter = fieldDelimiter;
+	outputFile->fileIdHeader = NULL;
+	outputFile->fileGroupHeader = NULL;
+	
+	assert(outputFile->fd != NULL);
+
+	return outputFile;
+	
+}
+
+
+
+/** 
+ ** Free memory for a TposeOutputFile 
+ **/
+void tposeIOOutputFileFree(
+    TposeOutputFile** outputFilePtr
+) {
+	//printf("tposeIOFileFree: Freeing TposeInputFile memory...\n");
+
+	if( (*outputFilePtr)->fileIdHeader != NULL)
+		tposeIOHeaderFree(&((*outputFilePtr)->fileIdHeader));
+
+	if( (*outputFilePtr)->fileGroupHeader != NULL)
+		tposeIOHeaderFree(&((*outputFilePtr)->fileGroupHeader));
+    
+   if(*outputFilePtr != NULL) {
+       free(*outputFilePtr);
+       *outputFilePtr = NULL;
+   }
+
+   assert(*outputFilePtr == NULL);
    //printf("tposeIOFileFree: TposeInputFile has been freed!\n");
 }
 
@@ -109,8 +173,9 @@ void tposeIOInputFileFree(
 /** 
  ** Allocates memory for the input file headers arrays 
  **/
-TposeHeader* tposeIOHeaderAlloc(unsigned int numFields)
-{
+TposeHeader* tposeIOHeaderAlloc(
+	unsigned int maxFields
+) {
 	//printf("tposeIOHeaderAlloc: numFields = %u\n", numFields);
 
 	TposeHeader* tposeHeader;
@@ -121,15 +186,17 @@ TposeHeader* tposeIOHeaderAlloc(unsigned int numFields)
 		return NULL;
 	}
 
-	if((tposeHeader->fields = (char**) malloc(numFields * sizeof(char*))) == NULL ) {
+	if((tposeHeader->fields = (char**) malloc(maxFields * sizeof(char*))) == NULL ) {
 		printf("tposeIOHeaderAlloc: malloc error\n");
 		return NULL;
 	}
 
-	tposeHeader->numFields = numFields;
+	tposeHeader->maxFields = maxFields;
+	tposeHeader->numFields = 0;
 	
 	assert(tposeHeader->fields != NULL);
-	assert(tposeHeader->numFields != 0);
+	assert(tposeHeader->maxFields != 0);
+	assert(tposeHeader->numFields == 0);
 
 	return tposeHeader;
 	
@@ -154,7 +221,7 @@ void tposeIOHeaderFree(
 
 	int field;
 	if((*tposeHeaderPtr)->fields != NULL) {
-		for(field = 0; field < (*tposeHeaderPtr)->numFields; field++) {
+		for(field = 0; field < (*tposeHeaderPtr)->maxFields; field++) {
 			free((*tposeHeaderPtr)->fields[field]);
 		} 
 
@@ -242,6 +309,7 @@ void tposeIOAggregatorFree(
  **/
 TposeQuery* tposeIOQueryAlloc(
 	TposeInputFile* inputFile
+	,TposeOutputFile* outputFile
 	,char* idVar
 	,char* groupVar
 	,char* numericVar
@@ -256,6 +324,8 @@ TposeQuery* tposeIOQueryAlloc(
 	}
 	
 	tposeQuery->inputFile = inputFile;
+	tposeQuery->outputFile = outputFile;
+	tposeQuery->aggregator = NULL;
 	tposeQuery->id = getFieldIndex(inputFile->fileHeader, idVar);
 	tposeQuery->group = getFieldIndex(inputFile->fileHeader, groupVar);
 	tposeQuery->numeric = getFieldIndex(inputFile->fileHeader, numericVar);
@@ -278,8 +348,10 @@ void tposeIOQueryFree(
 ) {
 
 	//printf("tposeIOQueryFree: Freeing TposeQuery memory...\n");
+	tposeIOAggregatorFree( &((*tposeQueryPtr)->aggregator) );
     
-	// No need to free the tposeInputFile, as this is done in the tposeIOCloseFile() call
+	// No need to free the inputFile, as this is done in the tposeIOCloseFile() call
+	// No need to free the outputFile, as this is done in the tposeIOCloseFile() call
    if(*tposeQueryPtr != NULL) { 
        free(*tposeQueryPtr);
        *tposeQueryPtr = NULL;
@@ -305,12 +377,12 @@ TposeInputFile* tposeIOOpenInputFile(
 	struct stat statBuffer;
 
 	if((fd = open(filePath, O_RDONLY)) < 0) {
-		printf("Error: tposeIOOpenFile - can not open file %s\n", filePath);
+		printf("Error: tposeIOOpenInputFile - can not open file %s\n", filePath);
 		return NULL;
 	}
 
 	if(fstat(fd, &statBuffer) < 0) {
-		printf("Error: tposeIOOpenFile - can not stat file %s\n", filePath);
+		printf("Error: tposeIOOpenInputFile- can not stat input file %s\n", filePath);
 		return NULL;
 	}
 
@@ -318,7 +390,7 @@ TposeInputFile* tposeIOOpenInputFile(
 	//pageSize = (size_t) sysconf (_SC_PAGESIZE); // Get page size
 
 	if((fileAddr = mmap(0, statBuffer.st_size, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0)) == MAP_FAILED ) {
-		printf("Error: tposeIOOpenFile - can not map file %s\n", filePath);
+		printf("Error: tposeIOOpenFile - can not map inputfile %s\n", filePath);
 		return NULL;
 	}
 
@@ -329,10 +401,10 @@ TposeInputFile* tposeIOOpenInputFile(
 
 	//printf("tposeIOOpenFile opened file %s\n", filePath);
 
-	TposeInputFile* tposeFile = tposeIOInputFileAlloc(fd, fileAddr, fileSize, fieldDelimiter); // Creates the file handle 
-	tposeFile->fileHeader = tposeIOReadInputHeader(tposeFile); // Opening a file also creates the TposeHeader struct
+	TposeInputFile* inputFile = tposeIOInputFileAlloc(fd, fileAddr, fileSize, fieldDelimiter); // Creates the file handle 
+	inputFile->fileHeader = tposeIOReadInputHeader(inputFile); // Opening a file also creates the TposeHeader struct
 
-	return tposeFile;
+	return inputFile;
 
 }
 
@@ -364,12 +436,59 @@ int tposeIOCloseInputFile(
 
 
 
+/** 
+ ** Open output file
+ **/
+TposeOutputFile* tposeIOOpenOutputFile(
+	char* filePath
+	,unsigned char fieldDelimiter
+) {
+
+	//int fd;
+	FILE* fd;
+	if(strcmp(filePath, "stdout")) {
+		//if((fd = open(filePath, O_WRONLY | O_CREAT | O_TRUNC | O_APPEND )) < 0) {
+		if((fd = fopen(filePath, "wa" )) == NULL) {
+			printf("Error: tposeIOOpenOutputFile - can not open output file %s\n", filePath);
+			return NULL;
+		}
+	}
+	else
+		fd = stdout; // If no output file is passed, print to std output
+
+	return tposeIOOutputFileAlloc(fd, fieldDelimiter); // Creates the file handle 
+
+}
+
+
+
+/** 
+ ** Close an output file
+ **/
+int tposeIOCloseOutputFile(
+	TposeOutputFile* outputFile
+) {
+
+	if(outputFile->fd != stdout) { // Close if not standard output 
+		if(ferror(outputFile->fd)) // Check for errors
+			fprintf(stderr, "tposeIOCloseOutputFile(): errno = %d - %s\n", errno, strerror(errno));
+		fclose(outputFile->fd);
+	}
+
+	// Free TposeOutputFile memory
+	tposeIOOutputFileFree(&outputFile);
+    
+	return 0;
+
+}
+
+
 
 /** 
  ** Reads the first line (header) of an input file
  **/
 TposeHeader* tposeIOReadInputHeader(
-	TposeInputFile* tposeFile
+	TposeInputFile* inputFile
 ) {
     
 	char* rowtok;
@@ -384,87 +503,46 @@ TposeHeader* tposeIOReadInputHeader(
 
 	
 	// Test if we have a good TposeInputFile*
-	if(!tposeFile) return NULL;
+	if(!inputFile) return NULL;
 
 	// Count number of fields
-	while( *(tposeFile->fileAddr+length) != '\n') {
-		if(  *(tposeFile->fileAddr+length) == (tposeFile->fieldDelimiter))
+	while( *(inputFile->fileAddr+length) != *rowDelimiter) {
+		if( *(inputFile->fileAddr+length) == (inputFile->fieldDelimiter))
 			fieldCount++; length++;
 	}
 	
 	if(fieldCount > 0)
 		fieldCount++; // Quick hack to get real number of fields
 
+//	printf("tposeIOReadInputHeader(): fieldCount = %u\n", fieldCount);
 	TposeHeader* header = tposeIOHeaderAlloc(fieldCount); // Allocate the needed memory
 
 	// Find index of first row delimiter
-	tposeFile->dataAddr = strchr(tposeFile->fileAddr, *rowDelimiter);
-	*tposeFile->dataAddr = '\0';
-	tposeFile->dataAddr+=1; // Make sure we're not pointing at the NULL 
+	inputFile->dataAddr = strchr(inputFile->fileAddr, *rowDelimiter);
+	*inputFile->dataAddr = '\0';
+	inputFile->dataAddr+=1; // Make sure we're not pointing at the NULL 
 	//printf("*** TEST: %s\n", tposeFile->fileAddr);
 	//printf("*** TEST: \n%s\n", tposeFile->dataAddr);
 
 	// Create a copy of the NULL terminated string (as strsep/strtok_r modifies this)
-	rowtok = strdup(tposeFile->fileAddr);
+	rowtok = strdup(inputFile->fileAddr);
 	
 	// Read header fields
-	fieldtok = strtok_r(rowtok, &(tposeFile->fieldDelimiter), &fieldSavePtr);
+	fieldtok = strtok_r(rowtok, &(inputFile->fieldDelimiter), &fieldSavePtr);
 	if(fieldtok == NULL) return NULL;
 	tempString = malloc(strlen(fieldtok) * sizeof(char));
 	strcpy(tempString, fieldtok);
 	*(header->fields) = tempString;
-	for(fieldCount = 1; (fieldtok = strtok_r(NULL, &(tposeFile->fieldDelimiter), &fieldSavePtr)) != NULL; ) {
+	for(fieldCount = 1; (fieldtok = strtok_r(NULL, &(inputFile->fieldDelimiter), &fieldSavePtr)) != NULL; ) {
 		tempString = malloc(strlen(fieldtok) * sizeof(char));
 		strcpy(tempString, fieldtok);
 		*(header->fields+(fieldCount++)) = tempString;
 	}
 	
-
+	// Clean-up
 	free(rowtok);
-	//free(fieldtok);
-	//free(fieldSavePtr);
-	//free(tempString);
-	/*rowtok = strtok_r(tposeFile->fileAddr, rowDelimiter, &rowSavePtr);
-	if(!isHeader++) {
-		if(rowtok != NULL) {
-			//printf("HEADER FIELDS = %s\n", rowtok);
-			fieldtok = strtok_r(rowtok, &(tposeFile->fieldDelimiter), &fieldSavePtr);
-			tempString = malloc(strlen(fieldtok) * sizeof(char));
-			strcpy(tempString, fieldtok);
-			*(header->fields) = tempString;
-			for(fieldCount = 1; (fieldtok = strtok_r(NULL, &(tposeFile->fieldDelimiter), &fieldSavePtr)) != NULL; ) {
-				tempString = malloc(strlen(fieldtok) * sizeof(char));
-				strcpy(tempString, fieldtok);
-				*(header->fields+(fieldCount++)) = tempString;
-			}
-				
-		}
-		else
-			return NULL;
-        
-	}*/
 
 	return header;
-
-    /*while(rowtok != NULL) {
-        //printf("row = %s\n", rowtok);
-        fieldtok = strtok_r(rowtok, fieldDel, &fieldSavePtr);
-        while(fieldtok != NULL) {
-            ++curField;
-            //printf("field = %s\n", fieldtok);
-            if(curField == primaryKeyField) {
-                //printf("primary key field = %s\n", fieldtok);
-                tposeSetKeyValue(key, atol(fieldtok), 0, strlen(fieldtok));
-                if(tposeInsert(tpose, key) == -1) {
-                    printf("tposeIOIndexFile Error: tposeInsertKey error!\n");
-                    exit(-1);
-                }
-            }
-            fieldtok = strtok_r(NULL, fieldDel, &fieldSavePtr);
-        }
-        curField = 0; //reset field count on new row
-        rowtok = strtok_r(NULL, rowDelimiter, &rowSavePtr);
-    } */
 
 }
 
@@ -473,11 +551,10 @@ TposeHeader* tposeIOReadInputHeader(
 /** 
  ** Returns a unique list of GROUP variable values 
  **/
-TposeHeader* tposeIOgetUniqueGroups(
+/* TposeHeader**/ void tposeIOgetUniqueGroups(
 	TposeQuery* tposeQuery
 	,BTree* btree
 ) {
-
 
 	char* fieldSavePtr;
 	char tempString[TPOSE_IO_MAX_FIELD_WIDTH];
@@ -486,14 +563,15 @@ TposeHeader* tposeIOgetUniqueGroups(
 	TposeHeader* header = tposeIOHeaderAlloc(TPOSE_IO_MAX_FIELDS); // Allocate the needed memory
 	BTreeKey* key = btreeKeyAlloc();
 	BTreeKey* resultKey;
-
+	
+	unsigned int rowCount = 2; // For debugging only
 	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
 	unsigned int uniqueGroupCount = 0; // Used to index array of header ptrs
-	unsigned int charCount = 0; 
+	unsigned int groupCharCount = 0; 
 	unsigned int hashCharCount = 0; 
+	unsigned int totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
 	unsigned long hashValue = 0; 
-	const unsigned long hashKey = 5381; 
-	const unsigned long hashMult = 37; 
+//	const unsigned long hashMult = 37; 
 
 	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
 
@@ -501,18 +579,22 @@ TposeHeader* tposeIOgetUniqueGroups(
 	printf("sizeof(unsigned long long) = %u bytes\n", sizeof(unsigned long long)); */
 
 	//printf("\n");
-	while(*fieldSavePtr != EOF) {
+	while(totalCharCount <= (tposeQuery->inputFile)->fileSize) {
+	//while((*fieldSavePtr != EOF) && (fieldSavePtr != NULL)) {
 
 		if(*fieldSavePtr == '\t') {
 			++fieldCount;
 			++fieldSavePtr;
-				continue;
+			++totalCharCount;
+			continue;
 		}
 
 		if(*fieldSavePtr == '\n') {
 			fieldCount = 0;
+			++rowCount;
 			++fieldSavePtr;
-				continue;
+			++totalCharCount;
+			continue;
 		}
 		
 		// Check if = group field
@@ -520,19 +602,14 @@ TposeHeader* tposeIOgetUniqueGroups(
 
 			// Copy field value
 			while(*fieldSavePtr != '\t' && *fieldSavePtr != '\n') {
-				tempString[charCount++] = *fieldSavePtr++;
+				tempString[groupCharCount++] = *fieldSavePtr++;
+				++totalCharCount;
 			}
-			tempString[charCount] = '\0'; // Null-terminate string
+			tempString[groupCharCount] = '\0'; // Null-terminate string
 
 			// Convert char array to hash
-			for(hashCharCount = 0; hashCharCount <= charCount-1; ++hashCharCount)
-				hashValue = hashMult * hashValue + (unsigned char) tempString[hashCharCount];
-				//hashValue += hashMult * hashKey + (unsigned char) tempString[hashCharCount];
-
-			/* hashValue %= TPOSE_IO_MAX_FIELDS;
-			if(hashValue < 0)
-				hashValue += TPOSE_IO_MAX_FIELDS;*/
-
+			for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
+				hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
 
 			// Insert into btree
 			if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) == NULL) {
@@ -540,7 +617,7 @@ TposeHeader* tposeIOgetUniqueGroups(
 				printf("New group value found = '"); */
 				
 				// Check for collisions - print only when we add a unique group
-				printf("%s\t%ld\t%u\n", tempString, hashValue, uniqueGroupCount);
+//				printf("ROW:%u = %s\t%ld\t%u\n", rowCount, tempString, hashValue, uniqueGroupCount);
 
 				btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
 				if(btreeInsert(btree, key) == -1) {
@@ -561,18 +638,23 @@ TposeHeader* tposeIOgetUniqueGroups(
 			}
 
 			// Reset variables (
-			charCount = 0;
+			groupCharCount = 0;
 			hashValue = 0;
 			
-			if(*fieldSavePtr == '\t')
+			if(*fieldSavePtr == '\t') {
 				--fieldSavePtr;
+				--totalCharCount;
+			}
 
-			if(*fieldSavePtr == '\n')
+			if(*fieldSavePtr == '\n') {
 				--fieldSavePtr;
+				--totalCharCount;
+			}
 		}
 
 		// If not a delimiter or the group field, then ++
 		++fieldSavePtr;
+		++totalCharCount;
 
 	}
 
@@ -586,9 +668,8 @@ TposeHeader* tposeIOgetUniqueGroups(
 	int i;
 	for(i = 0; i < uniqueGroupCount; ++i)
 		printf("group %d = %s\n", i, header->fields[i]); */
-	
-
-	return header;
+	(tposeQuery->outputFile)->fileGroupHeader = header;
+	//return header;
 	
 }
 
@@ -599,8 +680,6 @@ TposeHeader* tposeIOgetUniqueGroups(
  **/
 void tposeIOTransposeGroup(
 	TposeQuery* tposeQuery
-	,TposeHeader* outputHeader
-	,TposeAggregator* aggregator
 	,BTree* btree
 ) {
 
@@ -615,7 +694,6 @@ void tposeIOTransposeGroup(
 	//printf("fileAddr = \n%s\n", (tposeQuery->inputFile)->fileAddr);
 	//printf("dataAddr = \n%s\n", (tposeQuery->inputFile)->dataAddr);
 	
-
 	char* fieldSavePtr;
 	char groupTempString[TPOSE_IO_MAX_FIELD_WIDTH];
 	char numericTempString[TPOSE_IO_MAX_FIELD_WIDTH];
@@ -625,37 +703,43 @@ void tposeIOTransposeGroup(
 	//char* allocString;
 
 	//BTreeKey* key = btreeKeyAlloc();
+	tposeQuery->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields);
 	BTreeKey* resultKey;
 
-	unsigned int charCount = 0; 
+	unsigned int fieldCharCount = 0; 
 	unsigned int hashCharCount = 0; 
+	unsigned int totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
 	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
 	unsigned long hashValue = 0; 
-	const unsigned long hashMult = 37; 
+//	const unsigned long hashMult = 37; 
 
 	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
 
 
 	printf("\n");
-	while(*fieldSavePtr != EOF) {
+	while(totalCharCount <= (tposeQuery->inputFile)->fileSize) {
+	//while(*fieldSavePtr != EOF) {
 
 		if(*fieldSavePtr == '\t') {
 			++fieldCount;
 			++fieldSavePtr;
-				continue;
+			++totalCharCount;
+			continue;
 		}
 
 		if(*fieldSavePtr == '\n') {
-
+			// Aggregate value for each group
 			if((groupFoundFlag == 1) && (numericFoundFlag == 1))
-				aggregator->aggregates[groupFieldIndex] += atof(numericTempString);
+				(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
 				
+			// Reset flags for next row
 			groupFoundFlag = 0;
 			numericFoundFlag = 0;
 
 			fieldCount = 0;
 			++fieldSavePtr;
-				continue;
+			++totalCharCount;
+			continue;
 
 		}
 		
@@ -664,13 +748,14 @@ void tposeIOTransposeGroup(
 
 			// Get group field value
 			while(*fieldSavePtr != '\t' && *fieldSavePtr != '\n') {
-				groupTempString[charCount++] = *fieldSavePtr++;
+				groupTempString[fieldCharCount++] = *fieldSavePtr++;
+				++totalCharCount;
 			}
-			groupTempString[charCount] = '\0'; // Null-terminate string
+			groupTempString[fieldCharCount] = '\0'; // Null-terminate string
 
 			// Convert char array to hash
-			for(hashCharCount = 0; hashCharCount <= charCount-1; ++hashCharCount)
-				hashValue = hashMult * hashValue + (unsigned char) groupTempString[hashCharCount];
+			for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
+				hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
 
 			// Insert into btree
 			if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) != NULL) {
@@ -682,14 +767,18 @@ void tposeIOTransposeGroup(
 			}
 
 			// Reset variables
-			charCount = 0;
+			fieldCharCount = 0;
 			hashValue = 0;
 			
-			if(*fieldSavePtr == '\t')
+			if(*fieldSavePtr == '\t') {
 				--fieldSavePtr;
+				--totalCharCount;
+			}
 
-			if(*fieldSavePtr == '\n')
+			if(*fieldSavePtr == '\n') {
 				--fieldSavePtr;
+				--totalCharCount;
+			}
 		}
 		
 
@@ -698,30 +787,65 @@ void tposeIOTransposeGroup(
 			
 			// Copy field value
 			while(*fieldSavePtr != '\t' && *fieldSavePtr != '\n') {
-				numericTempString[charCount++] = *fieldSavePtr++;
+				numericTempString[fieldCharCount++] = *fieldSavePtr++;
+				++totalCharCount;
 			}
-			numericTempString[charCount] = '\0'; // Null-terminate string
+			numericTempString[fieldCharCount] = '\0'; // Null-terminate string
 
 			// Flag numeric field as found
 			numericFoundFlag = 1;
 
 			// Reset variables
-			charCount = 0;
+			fieldCharCount = 0;
 
-			if(*fieldSavePtr == '\t')
+			if(*fieldSavePtr == '\t') {
+				--totalCharCount;
 				--fieldSavePtr;
+			}
 
-			if(*fieldSavePtr == '\n')
+			if(*fieldSavePtr == '\n') {
 				--fieldSavePtr;
+				--totalCharCount;
+			}
 		}
 
 		// If not a delimiter or the group field, then ++
 		++fieldSavePtr;
+		++totalCharCount;
 
 	}
 
-	// Clean-up
-	//btreeKeyFree(&key);
-	
 }
+
+
+
+/** 
+ ** 
+ **/
+void tposeIOPrintOutput(
+	TposeQuery* tposeQuery
+) {
+
+	int i;
+
+	// Group Header
+	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+		if(i == (((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1))
+			fprintf((tposeQuery->outputFile)->fd, "%s\n", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i]);
+		else
+			fprintf((tposeQuery->outputFile)->fd, "%s\t", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i]);
+	}
+
+	// Aggregates
+	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+		if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+			fprintf((tposeQuery->outputFile)->fd, "%.2f\n", (tposeQuery->aggregator)->aggregates[i]);
+		else
+			fprintf((tposeQuery->outputFile)->fd, "%.2f\t", (tposeQuery->aggregator)->aggregates[i]);
+	}
+
+	fflush((tposeQuery->outputFile)->fd);
+
+}
+
 

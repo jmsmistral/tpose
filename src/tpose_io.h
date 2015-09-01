@@ -21,8 +21,6 @@
 
 
 	#include <string.h>
-	#include <unistd.h>
-	#include <fcntl.h>
 	#include <sys/mman.h>
 	#include <sys/stat.h>
 	#include <stdio.h>
@@ -30,6 +28,8 @@
 	#include <assert.h>
 	#include <error.h>
 	#include <errno.h>
+	#include <unistd.h>
+	#include <fcntl.h>
 
 	#include "btree.h"
 
@@ -40,16 +40,19 @@
 	#define TPOSE_IO_MAX_LINE 1048576
 	#define TPOSE_IO_MAX_FIELDS 5000
 	#define TPOSE_IO_MAX_FIELD_WIDTH 5000
+	
+	#define TPOSE_IO_HASH_MULT 37
 
 	extern char* rowDelimiter;
-	
+
 
 	/**
 	 ** TposeHeader
 	 **/
 	typedef struct {
 		char** fields;
-		unsigned int numFields;
+		unsigned int numFields; // Number of actual fields
+		unsigned int maxFields; // Number of total fields allocated (used to free memory)
 	} TposeHeader;
 
 
@@ -80,10 +83,11 @@
 	 ** TposeOutputFile
 	 **/
 	typedef struct {
-		int fd;
-		char* fileAddr;
+		//int fd;
+		FILE* fd;
 		unsigned char fieldDelimiter;
-		TposeHeader* fileHeader;
+		TposeHeader* fileIdHeader;
+		TposeHeader* fileGroupHeader;
 	} TposeOutputFile;
 
 	/**
@@ -91,43 +95,47 @@
 	 **/
 	typedef struct {
 		TposeInputFile* inputFile;
-		//TposeInputFile* tposeOutputFile;
+		TposeOutputFile* outputFile;
+		TposeAggregator* aggregator;
 		int id;
 		int group;
 		int numeric;
 	} TposeQuery;
 
 
-	/* interface */
-	/* input */
+	/* Input */
 	TposeInputFile* tposeIOOpenInputFile(char* filePath, unsigned char fieldDelimiter);
-	int tposeIOCloseInputFile(TposeInputFile* tposeFile);
-
-	TposeHeader* tposeIOReadInputHeader(TposeInputFile* tposeFile);
+	int tposeIOCloseInputFile(TposeInputFile* inputFile);
 
 	TposeInputFile* tposeIOInputFileAlloc(int fd, char* fileAddr, size_t fileSize, unsigned char fieldDelimiter);
-	void tposeIOInputFileFree(TposeInputFile** tposeFilePtr);
+	void tposeIOInputFileFree(TposeInputFile** intputFilePtr);
+
+	TposeHeader* tposeIOReadInputHeader(TposeInputFile* inputFile);
 
 
-	/* output */
-	TposeOutputFile* tposeIOOpenOutFile(char* filePath, unsigned char fieldDelimiter);
-	int tposeIOCloseOutputFile(TposeOutputFile* tposeFile);
+	/* Output */
+	TposeOutputFile* tposeIOOpenOutputFile(char* filePath, unsigned char fieldDelimiter);
+	int tposeIOCloseOutputFile(TposeOutputFile* outputFile);
+
+	TposeOutputFile* tposeIOOutputFileAlloc(FILE* fd, unsigned char fieldDelimiter);
+	void tposeIOOutputFileFree(TposeOutputFile** outputFilePtr);
 
 
-	/* input/output */
-	TposeHeader* tposeIOHeaderAlloc(unsigned int numFields);
+	/* General */
+	TposeHeader* tposeIOHeaderAlloc(unsigned int maxFields);
 	void tposeIOHeaderFree(TposeHeader** tposeHeaderPtr);
 
 	TposeAggregator* tposeIOAggregatorAlloc(unsigned int numFields);
 	void tposeIOAggregatorFree(TposeAggregator** tposeAggregatorPtr);
 
-	TposeQuery* tposeIOQueryAlloc(TposeInputFile* inputFile, char* idVar, char* groupVar, char* numericVar);
+	TposeQuery* tposeIOQueryAlloc(TposeInputFile* inputFile, TposeOutputFile* outputFile, char* idVar, char* groupVar, char* numericVar);
 	void tposeIOQueryFree(TposeQuery** tposeQueryPtr);
 
 
-	/* util */
-	TposeHeader* tposeIOgetUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
-	void tposeIOTransposeGroup(TposeQuery* tposeQuery, TposeHeader* outputHeader, TposeAggregator* aggregates, BTree* btree);
+	/* Util */
+	void tposeIOgetUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
+	void tposeIOTransposeGroup(TposeQuery* tposeQuery, BTree* btree);
+	void tposeIOPrintOutput(TposeQuery* tposeQuery);
 	//int tposeIOgetFieldIndex(TposeHeader* tposeHeader, char* field); 
 
 

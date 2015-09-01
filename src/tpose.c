@@ -78,8 +78,8 @@ int main(
 
 	bool delimiterSpecified = false;
 
-	char* inputFilePath;
-	char* outputFilePath;
+	char* inputFilePath = NULL;
+	char* outputFilePath = NULL;
 
 	int curArg;	
 	int iArg;
@@ -152,12 +152,25 @@ int main(
 	}
 
 	/* Get input file */
+	//printf("optind = %d && argc = %d\n", optind, argc);
 	if(optind < argc) {
-		for (iArg = optind; iArg < argc; iArg++) {
+		for (iArg = optind; iArg < argc; ++iArg) {
+
+			/*printf("iArg = %d\n", iArg);
+			printf("argv[iArg] = %s\n", argv[iArg]);
+			printf("fileArg = %d\n", fileArg);*/
+
 			if(fileArg == 0)
-				inputFilePath = argv[iArg]; //&& printf("input: %s\n", inputFilePath); 
-			else if(fileArg++ == 1)
-				outputFilePath = argv[iArg]; //&& printf("output: %s\n", outputFilePath); 
+				inputFilePath = argv[iArg];
+			else if(fileArg == 1)
+				outputFilePath = argv[iArg];
+			else {
+				fprintf(stderr, "Too many files specified!\n");
+				//printUsage();
+				abort();
+			}
+			
+			++fileArg;
 		}
 	}
 	else {
@@ -188,6 +201,7 @@ int main(
 		delimiter = '\t';
 	}
 
+
 	/*printf("DELIMITER = '%c'\n", delimiter);
 
 	//Check group variable
@@ -198,35 +212,48 @@ int main(
 	
 	//Check numeric variable
 	printf("NUMERIC = %s\n", numericArg); */
+	
+	// Check output file (if empty, use stdout)
+	if(!outputFilePath) {
+		outputFilePath = "stdout";
+	}
 
+	
+	printf("input: %s\n", inputFilePath); 
+	printf("output: %s\n", outputFilePath); 
 
 	/* Event-loop */
 	//printf("\n");
-	TposeInputFile* tposeInputFile = tposeIOOpenInputFile(inputFilePath, delimiter);
-	//TposeOutputFile* tposeOutputFile = tposeIOOpenInputFile(inputFilePath, delimiter);
-	TposeQuery* tposeQuery = tposeIOQueryAlloc(tposeInputFile, idArg, groupArg, numericArg);
-	BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
-	//printf("\n");
-
-	//printf("\n");
-	TposeHeader* outputHeader = tposeIOgetUniqueGroups(tposeQuery, btree);
-	TposeAggregator* aggregator = tposeIOAggregatorAlloc(outputHeader->numFields);
+	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter);
+	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
+	TposeQuery* tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg);
 	
-	//printf("\n");
-	tposeIOTransposeGroup(tposeQuery, outputHeader, aggregator, btree);
-	
-	int z;
-	for(z = 0; z < aggregator->numFields; ++z)
-		printf("%s = %f\n", outputHeader->fields[z], aggregator->aggregates[z]); 
+	// Transpose Simple
+	if(!groupFlag && !numericFlag && !idFlag) {
+	}
 
+	// Transpose Group
+	if(groupFlag && numericFlag && !idFlag) {
+		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+		tposeIOgetUniqueGroups(tposeQuery, btree);
+		tposeIOTransposeGroup(tposeQuery, btree);
+		tposeIOPrintOutput(tposeQuery);
+		btreeFree(&btree);
+	}
+	
+	// Transpose Group Id
+	if(groupFlag && numericFlag && idFlag) {
+		/*BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+		tposeIOgetUniqueGroups(tposeQuery, btree);
+		tposeIOTransposeGroupId(tposeQuery, btree);
+		btreeFree(&btree); */
+	}
 	//printf("\n");
 	
 	//Clean-up
-	btreeFree(&btree);
-	tposeIOAggregatorFree(&aggregator);
-	tposeIOHeaderFree(&outputHeader);
+	tposeIOCloseInputFile(inputFile);
+	tposeIOCloseOutputFile(outputFile);
 	tposeIOQueryFree(&tposeQuery);
-	tposeIOCloseInputFile(tposeInputFile);
 	//printf("\n");
 	
 	/*printf("sizeof(char) = %u\n", sizeof(char) );
