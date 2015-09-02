@@ -180,7 +180,6 @@ int main(
 	}
 		
 
-
 	/* Run checks on option arguments */
 	// Check delimiter (default = \t)
 	delimiter = '\0';
@@ -201,35 +200,37 @@ int main(
 		delimiter = '\t';
 	}
 
-
-	/*printf("DELIMITER = '%c'\n", delimiter);
-
-	//Check group variable
-	printf("ID = %s\n", idArg);
+	/*printf("DELIMITER = '%c'\n", delimiter); */
 
 	//Check group variable
-	printf("GROUP = %s\n", groupArg);
+	//printf("ID = %s\n", idArg);
+
+	//Check group variable
+	//printf("GROUP = %s\n", groupArg);
 	
 	//Check numeric variable
-	printf("NUMERIC = %s\n", numericArg); */
+	//printf("NUMERIC = %s\n", numericArg); 
 	
 	// Check output file (if empty, use stdout)
 	if(!outputFilePath) {
 		outputFilePath = "stdout";
 	}
 
+	unsigned int mutateHeader = 1;
+	if(!groupFlag && !numericFlag && !idFlag)
+		mutateHeader = 0;
 	
 	printf("input: %s\n", inputFilePath); 
 	printf("output: %s\n", outputFilePath); 
 
 	/* Event-loop */
-	//printf("\n");
-	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter);
+	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
 	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
 	TposeQuery* tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg);
 	
 	// Transpose Simple
 	if(!groupFlag && !numericFlag && !idFlag) {
+		tposeIOTransposeSimple(tposeQuery);
 	}
 
 	// Transpose Group
@@ -243,25 +244,17 @@ int main(
 	
 	// Transpose Group Id
 	if(groupFlag && numericFlag && idFlag) {
-		/*BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOgetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroupId(tposeQuery, btree);
-		btreeFree(&btree); */
+		btreeFree(&btree);
 	}
-	//printf("\n");
 	
 	//Clean-up
 	tposeIOCloseInputFile(inputFile);
 	tposeIOCloseOutputFile(outputFile);
 	tposeIOQueryFree(&tposeQuery);
-	//printf("\n");
 	
-	/*printf("sizeof(char) = %u\n", sizeof(char) );
-	printf("sizeof(long) = %u\n", sizeof(long) );
-	printf("sizeof(off_t) = %u\n", sizeof(off_t) );
-	printf("sizeof(float) = %u\n", sizeof(float) );
-	printf("sizeof(double) = %u\n", sizeof(double) );*/
-
 	exit(EXIT_SUCCESS);
 }
 

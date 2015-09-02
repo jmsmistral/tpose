@@ -74,8 +74,6 @@
 		char* dataAddr;
 		size_t fileSize;
 		unsigned char fieldDelimiter;
-		//size_t pageSize;
-		
 		TposeHeader* fileHeader;
 	} TposeInputFile;
 
@@ -83,7 +81,6 @@
 	 ** TposeOutputFile
 	 **/
 	typedef struct {
-		//int fd;
 		FILE* fd;
 		unsigned char fieldDelimiter;
 		TposeHeader* fileIdHeader;
@@ -104,13 +101,13 @@
 
 
 	/* Input */
-	TposeInputFile* tposeIOOpenInputFile(char* filePath, unsigned char fieldDelimiter);
+	TposeInputFile* tposeIOOpenInputFile(char* filePath, unsigned char fieldDelimiter, unsigned int mutateHeader);
 	int tposeIOCloseInputFile(TposeInputFile* inputFile);
 
 	TposeInputFile* tposeIOInputFileAlloc(int fd, char* fileAddr, size_t fileSize, unsigned char fieldDelimiter);
 	void tposeIOInputFileFree(TposeInputFile** intputFilePtr);
 
-	TposeHeader* tposeIOReadInputHeader(TposeInputFile* inputFile);
+	TposeHeader* tposeIOReadInputHeader(TposeInputFile* inputFile, unsigned int mutateHeader);
 
 
 	/* Output */
@@ -133,9 +130,15 @@
 
 
 	/* Util */
+	void tposeIOTransposeSimple(TposeQuery* tposeQuery);
+
 	void tposeIOgetUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOTransposeGroup(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOPrintOutput(TposeQuery* tposeQuery);
+
+	void tposeIOTransposeGroupId(TposeQuery* tposeQuery, BTree* btree);
+	void tposeIOPrintGroupIdHeader(TposeQuery* tposeQuery);
+	void tposeIOPrintGroupIdData(char* id, TposeQuery* tposeQuery);
 	//int tposeIOgetFieldIndex(TposeHeader* tposeHeader, char* field); 
 
 
