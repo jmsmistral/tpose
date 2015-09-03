@@ -230,11 +230,13 @@ int main(
 	
 	// Transpose Simple
 	if(!groupFlag && !numericFlag && !idFlag) {
+		printf("Transpose Simple\n");
 		tposeIOTransposeSimple(tposeQuery);
 	}
 
 	// Transpose Group
 	if(groupFlag && numericFlag && !idFlag) {
+		printf("Transpose Group\n");
 		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOgetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroup(tposeQuery, btree);
@@ -244,6 +246,7 @@ int main(
 	
 	// Transpose Group Id
 	if(groupFlag && numericFlag && idFlag) {
+		printf("Transpose Group Id\n");
 		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOgetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroupId(tposeQuery, btree);
@@ -257,5 +260,4 @@ int main(
 	
 	exit(EXIT_SUCCESS);
 }
-
 

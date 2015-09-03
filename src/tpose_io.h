@@ -43,7 +43,7 @@
 	
 	#define TPOSE_IO_HASH_MULT 37
 
-	extern char* rowDelimiter;
+	extern unsigned char rowDelimiter;
 
 
 	/**
