@@ -37,14 +37,4 @@
 #include <wchar.h>
 #include <wctype.h>
 
-
-
-/* Internationalization.  */
-/* # include "gettext.h"
-# define _(str) gettext (str)
-# define N_(str) gettext_noop (str) */
-
-/* Check for errors on write.  */
-/* # include "closeout.h" */
-
 #endif /* TPOSE_SYSTEM_H */

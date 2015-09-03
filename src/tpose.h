@@ -18,5 +18,6 @@
 #ifndef TPOSE_TPOSE_H
 #define TPOSE_TPOSE_H
 
+#define TPOSE_VERSION "0.1.0"
 
 #endif /* TPOSE_TPOSE_H */

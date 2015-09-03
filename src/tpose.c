@@ -24,26 +24,27 @@
 
 
 /* Commandline Options */
-static const char* shortopts = "d:xp:s:a:k:i:g:n:hv";
+static const char* shortopts = "d:ip:s:a:hv";
 static const struct option longopts[] = {
 	{"delimiter", required_argument, NULL, 'd'}
-	,{"indexed", no_argument, NULL, 'x'}
-	,{"unbuffered", no_argument, NULL, 'u'}
+	,{"indexed", no_argument, NULL, 'i'}
+	//,{"unbuffered", no_argument, NULL, 'u'}
 	,{"prefix", required_argument, NULL, 'p'}
 	,{"suffix", required_argument, NULL, 's'}
 	,{"aggregate", required_argument, NULL, 'a'}
-	,{"keep", required_argument, NULL, 'k'}
-	,{"id", required_argument, NULL, 'i'}
-	,{"group", required_argument, NULL, 'g'}
-	,{"numeric", required_argument, NULL, 'n'}
+	//,{"keep", required_argument, NULL, 'k'}
+	,{"id", required_argument, NULL, 'x'}
+	,{"group", required_argument, NULL, 'y'}
+	,{"numeric", required_argument, NULL, 'z'}
 	,{"help", no_argument, NULL, 'h'}
 	,{"version", no_argument, NULL, 'v'}
 	,{NULL, 0, NULL, 0}
 };
 
 /* Forward declarations */
-static void printHelp (void);
-static void printVersion (void);
+static void printHelp (int status);
+static void printVersion (int status);
+static void printContact (int status);
 
 static unsigned char delimiter;
 
@@ -52,16 +53,16 @@ int main(
 	,char* argv[]
 ) {
 
-	set_program_name (argv[0]);
-	atexit (close_stdout);
+	set_program_name(argv[0]);
+	atexit(close_stdout);
 
 	int delimiterFlag = 0;
 	int indexedFlag = 0;
-	int unbufferedFlag = 0;
+	//int unbufferedFlag = 0;
 	int prefixFlag = 0;
 	int suffixFlag = 0;
 	int aggregateFlag = 0;
-	int keepFlag = 0;
+	//int keepFlag = 0;
 	int idFlag = 0;
 	int groupFlag = 0;
 	int numericFlag = 0;
@@ -71,7 +72,7 @@ int main(
 	char* prefixArg = NULL;
 	char* suffixArg = NULL;
 	char* aggregateArg = NULL;
-	char* keepArg = NULL;
+	//char* keepArg = NULL;
 	char* idArg = NULL;
 	char* groupArg = NULL;
 	char* numericArg = NULL;
@@ -93,12 +94,12 @@ int main(
 				delimiterFlag = 1;
 				delimiterArg = optarg;
 				break;
-			case 'x':
+			case 'i':
 				indexedFlag = 1;
 				break;
-			case 'u':
+			/*case 'u':
 				unbufferedFlag = 1;
-				break;
+				break;*/
 			case 'p':
 				prefixFlag = 1;
 				prefixArg = optarg;
@@ -111,27 +112,29 @@ int main(
 				aggregateFlag = 1;
 				aggregateArg = optarg;
 				break;
-			case 'k':
+			/*case 'k':
 				keepFlag = 1;
 				keepArg = optarg;
-				break;
-			case 'i':
+				break;*/
+			case 'x':
 				idFlag = 1;
 				idArg = optarg;
 				break;
-			case 'g':
+			case 'y':
 				groupFlag = 1;
 				groupArg = optarg;
 				break;
-			case 'n':
+			case 'z':
 				numericFlag = 1;
 				numericArg = optarg;
 				break;
 			case 'h':
+				printHelp(0);
 				helpFlag = 1;
 				exit (EXIT_SUCCESS);
 				break;
 			case 'v':
+				printVersion(0);
 				versionFlag = 1;
 				exit (EXIT_SUCCESS);
 				break;
@@ -143,15 +146,16 @@ int main(
 				else
 					fprintf(stderr, "Unknown option character '\\x%x'.\n", optopt);
 				return 1; */
-				fprintf(stderr, "Missing argument. optopt = %c\n", optopt);
-				//TODO print usage text
+				fprintf(stderr, "Missing option or argument. optopt = %c\n", optopt);
+				printHelp(1);
 				abort;
 			default:
+				printHelp(1);
 				abort();
 		}
 	}
 
-	/* Get input file */
+	/* Get input/output file */
 	//printf("optind = %d && argc = %d\n", optind, argc);
 	if(optind < argc) {
 		for (iArg = optind; iArg < argc; ++iArg) {
@@ -166,7 +170,7 @@ int main(
 				outputFilePath = argv[iArg];
 			else {
 				fprintf(stderr, "Too many files specified!\n");
-				//printUsage();
+				printHelp(1);
 				abort();
 			}
 			
@@ -175,7 +179,7 @@ int main(
 	}
 	else {
 		fprintf(stderr, "Missing input file.\n");
-		//printUsage();
+		printHelp(1);
 		abort();
 	}
 		
@@ -196,7 +200,7 @@ int main(
 	}
 
 	if (!delimiterSpecified) {
-		//fprintf(stdout, "A delimiter character has not been specified\n");
+		fprintf(stdout, "No field delimiter character specified, using TAB as default\n");
 		delimiter = '\t';
 	}
 
@@ -261,3 +265,90 @@ int main(
 	exit(EXIT_SUCCESS);
 }
 
+
+
+/* Print tpose usage information */
+static void printHelp
+(
+	int status
+) { 
+
+	FILE *out = status ? stderr : stdout;
+
+  fprintf(out, "\n\
+Usage: %s input-file [output-file] [--options] \n\n", program_name);
+
+  fprintf(out, "  -d<string>, --delimiter=<string>\n\
+\t\tspecify field delimiter used to read input file\n");
+  fprintf(out, "  -i, --indexed\n\
+\t\tuse field indexes (e.g. 1,2,...,<max-fields>) \
+to match fields, instead of field names\n");
+  fprintf(out, "  -p<string>, --prefix=<string>\n\
+\t\tprefix new field names with given string\n");
+  fprintf(out, "  -s<string>, --suffix=<string>\n\
+\t\tsuffix new field names with given string\n");
+  fprintf(out, "  -a<type>, --aggregate=<type>\n\
+\t\taggregates numeric values according to <aggregate-type> passed.\n\
+\t\tcan be either 'SUM', 'COUNT', or 'AVG' (Default = 'SUM')\n\
+\t\t(note: requires --numeric to be specified\n");
+  fprintf(out, "  --id=<field-name>\n\
+\t\tdefines ID field in input file (note: requires both --group, and --numeric\n");
+  fprintf(out, "  --group=<field-name>\n\
+\t\tdefines GROUP field in input file.\n\
+\t\tThis field stores he group values to transpose\n\
+\t\tthe NUMERIC field values over (note: requires --numeric)\n");
+  fprintf(out, "  --numeric=<field-name>\n\
+\t\tdefines NUMERIC field in input file. This field holds the\n\
+\t\tnumeric values to be transposed. These values will be\n\
+\t\taggregated according to the --aggregate option\n");
+  fprintf(out, "  -h, --help\n\
+\t\tdisplay this help and exit\n");
+  fprintf(out, "  -v, --version\n\
+\t\toutput version information and exit\n\n");
+
+  printContact(status);
+
+  fclose(out);
+  exit(status);
+
+}
+
+
+
+/* Print tpose usage information */
+static void printContact
+(
+	int status
+) {
+
+	char* email = "jmsmistral@gmail.com";
+	FILE *out = status ? stderr : stdout;
+
+	fprintf(out, "tpose home page: <https://www.bitbucket.org/jmsmistral/tpose>.\n");
+
+	//if (!status)
+	fprintf(out, "E-mail bug reports to: Jonathan Sacramento <%s>.\n\
+Be sure to include the word ''TPOSE BUG'' somewhere in the ''Subject:'' field.\n", email);
+
+}
+
+static void printVersion
+(
+	int status
+) {
+
+	FILE *out = status ? stderr : stdout;
+
+	fprintf(out, "tpose version %s\n", TPOSE_VERSION);
+	fprintf(out, "Copyright (C) Jonathan Sacramento\n"); //, (wchar_t)0xA9);
+	fprintf(out, "This is free software; you can redistribute it and/or modify\n\
+it under the terms of the GNU General Public License as published by\n\
+the Free Software Foundation; either version 3, or (at your option)\n\
+any later version;\n\n\
+See source code for copying conditions.\n\
+There is NO WARRANTY; not even for MERCHANTABILITY or \n\
+FITNESS FOR A PARTICULAR PURPOSE, to the extent permitted by law.\n\n");
+
+	printContact(status);
+
+}
