@@ -22,11 +22,32 @@
 unsigned char rowDelimiter = '\n';
 extern int errno;
 
+	
+
+/** 
+ ** Return lower-case 
+ **/
+char* tposeIOLowerCase(
+	char* string
+) {
+	
+	if(string == NULL)
+		return NULL;
+
+	int i;
+	for(i=0; (*(string+i) = tolower(*(string+i))) != '\0'; ++i);
+	
+	return string;
+
+}
+
+
+
 /** 
  ** Return the integer index of the field parameter 
  ** returns -1 if field passed doesn't match any of the header fields
  **/
-int getFieldIndex(
+int tposeIOGetFieldIndex(
 	TposeHeader* tposeHeader
    ,char* field
 ) {
@@ -40,17 +61,25 @@ int getFieldIndex(
 	else
 		numFields = tposeHeader->numFields; // To limit iterating more than needed
 
-//	printf("getFieldIndex numFields = %d\n", numFields);
 
+	int foundFlag = 0;
 	int i;
 	for(i = 0; i < numFields; i++) {
 		if(!strcmp(field, *(tposeHeader->fields+i))) {
 //			printf("i = %d\n", i);
+			foundFlag = 1;
 			break;
 		}
 	}
 
-//	printf("broken out @ i = %d\n", i);
+	if(!foundFlag && (i==numFields))
+		return -1; // Not found
+
+
+	/*printf("tposeIOGetFieldIndex found flag =  %d\n", foundFlag);
+	printf("tposeIOGetFieldIndex search field =  %s\n", field);
+	printf("tposeIOGetFieldIndex numFields = %d\n", numFields);
+	printf("broken out @ i = %d\n", i); */
 
 	return i; 
 	
@@ -315,20 +344,28 @@ TposeQuery* tposeIOQueryAlloc(
 	,char* numericVar
 ) {
 
+	// Check parameters passed
+	/*printf("idVar = %s (%d)\n", idVar, tposeIOGetFieldIndex(inputFile->fileHeader, idVar) );
+	printf("groupVar = %s (%d)\n", groupVar, tposeIOGetFieldIndex(inputFile->fileHeader, groupVar) );
+	printf("numericVar = %s (%d)\n", numericVar, tposeIOGetFieldIndex(inputFile->fileHeader, numericVar) ); */
+	if((idVar != NULL) && (tposeIOGetFieldIndex(inputFile->fileHeader, idVar) == -1)) return NULL;
+	if((groupVar != NULL) && (tposeIOGetFieldIndex(inputFile->fileHeader, groupVar) == -1)) return NULL;
+	if((numericVar != NULL) && (tposeIOGetFieldIndex(inputFile->fileHeader, numericVar) == -1)) return NULL;
+
 	TposeQuery* tposeQuery;
 
 	/* Allocate memory for the query parameters */
 	if((tposeQuery = (TposeQuery*) malloc(sizeof(TposeQuery))) == NULL ) {
 		printf("tposeIOQueryAlloc: malloc error\n");
-		return NULL;
+		exit(EXIT_FAILURE);
 	}
 	
 	tposeQuery->inputFile = inputFile;
 	tposeQuery->outputFile = outputFile;
 	tposeQuery->aggregator = NULL;
-	if(idVar != NULL) tposeQuery->id = getFieldIndex(inputFile->fileHeader, idVar);
-	if(groupVar != NULL) tposeQuery->group = getFieldIndex(inputFile->fileHeader, groupVar);
-	if(numericVar != NULL) tposeQuery->numeric = getFieldIndex(inputFile->fileHeader, numericVar);
+	if(idVar != NULL) tposeQuery->id = tposeIOGetFieldIndex(inputFile->fileHeader, idVar);
+	if(groupVar != NULL) tposeQuery->group = tposeIOGetFieldIndex(inputFile->fileHeader, groupVar);
+	if(numericVar != NULL) tposeQuery->numeric = tposeIOGetFieldIndex(inputFile->fileHeader, numericVar);
 
 	/*printf("*** Initialised query id = %d\n", tposeQuery->id);
 	printf("*** Initialised query group = %d\n", tposeQuery->group);
@@ -534,11 +571,11 @@ TposeHeader* tposeIOReadInputHeader(
 		if(fieldtok == NULL) return NULL;
 		tempString = malloc(strlen(fieldtok) * sizeof(char));
 		strcpy(tempString, fieldtok);
-		*(header->fields) = tempString;
+		*(header->fields) = tposeIOLowerCase(tempString);
 		for(fieldCount = 1; (fieldtok = strtok_r(NULL, &(inputFile->fieldDelimiter), &fieldSavePtr)) != NULL; ) {
 			tempString = malloc(strlen(fieldtok) * sizeof(char));
 			strcpy(tempString, fieldtok);
-			*(header->fields+(fieldCount++)) = tempString;
+			*(header->fields+(fieldCount++)) = tposeIOLowerCase(tempString);
 		}
 		
 		// Clean-up

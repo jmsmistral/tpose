@@ -118,15 +118,18 @@ int main(
 				break;*/
 			case 'x':
 				idFlag = 1;
-				idArg = optarg;
+				idArg = strdup(optarg);
+				tposeIOLowerCase(idArg);
 				break;
 			case 'y':
 				groupFlag = 1;
-				groupArg = optarg;
+				groupArg = strdup(optarg);
+				tposeIOLowerCase(groupArg);
 				break;
 			case 'z':
 				numericFlag = 1;
-				numericArg = optarg;
+				numericArg = strdup(optarg);
+				tposeIOLowerCase(numericArg);
 				break;
 			case 'h':
 				printHelp(0);
@@ -182,7 +185,8 @@ int main(
 		printHelp(1);
 		abort();
 	}
-		
+
+
 
 	/* Run checks on option arguments */
 	// Check delimiter (default = \t)
@@ -214,6 +218,7 @@ int main(
 	
 	//Check numeric variable
 	//printf("NUMERIC = %s\n", numericArg); 
+	
 
 	if(groupFlag && !numericFlag) {
 		fprintf(stderr, "NUMERIC field needs to be specified (see --numeric option)\n");
@@ -244,7 +249,12 @@ int main(
 	/* Event-loop */
 	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
 	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
-	TposeQuery* tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg);
+	TposeQuery* tposeQuery;
+	if((tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg)) == NULL) {
+		fprintf(stderr, "--id, --group, or --numeric parameters do not match input fields\n");
+		printHelp(1);
+		exit(EXIT_FAILURE);
+	}
 	
 	// Transpose Simple
 	if(!groupFlag && !numericFlag && !idFlag) {

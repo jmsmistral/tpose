@@ -139,7 +139,8 @@
 	void tposeIOTransposeGroupId(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOPrintGroupIdHeader(TposeQuery* tposeQuery);
 	void tposeIOPrintGroupIdData(char* id, TposeQuery* tposeQuery);
-	//int tposeIOgetFieldIndex(TposeHeader* tposeHeader, char* field); 
+	//int tposeIOGetFieldIndex(TposeHeader* tposeHeader, char* field); 
+	//char* tposeIOLowerCase(char* string);
 
 
 #endif /* TPOSE_IO_H */
