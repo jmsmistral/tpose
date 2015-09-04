@@ -334,7 +334,8 @@ void tposeIOAggregatorFree(
 
 
 /** 
- ** Allocates memory for the transpose parameters 
+ ** Allocates memory for the transpose parameters
+ ** Note: Matches field names
  **/
 TposeQuery* tposeIOQueryAlloc(
 	TposeInputFile* inputFile
@@ -366,6 +367,65 @@ TposeQuery* tposeIOQueryAlloc(
 	if(idVar != NULL) tposeQuery->id = tposeIOGetFieldIndex(inputFile->fileHeader, idVar);
 	if(groupVar != NULL) tposeQuery->group = tposeIOGetFieldIndex(inputFile->fileHeader, groupVar);
 	if(numericVar != NULL) tposeQuery->numeric = tposeIOGetFieldIndex(inputFile->fileHeader, numericVar);
+
+	/*printf("*** Initialised query id = %d\n", tposeQuery->id);
+	printf("*** Initialised query group = %d\n", tposeQuery->group);
+	printf("*** Initialised query numeric = %d\n", tposeQuery->numeric);*/
+
+	return tposeQuery;
+	
+}
+
+
+
+/** 
+ ** Allocates memory for the transpose parameters
+ ** Note: Matches field indexes
+ **/
+TposeQuery* tposeIOQueryIndexedAlloc(
+	TposeInputFile* inputFile
+	,TposeOutputFile* outputFile
+	,int idVar
+	,int groupVar
+	,int numericVar
+) {
+
+	// Correct field indexes so they're zero-based
+	if(idVar != -1) --idVar;
+	if(groupVar != -1) --groupVar;
+	if(numericVar != -1) --numericVar;
+
+	int minIndex = 0;
+	int maxIndex;
+	if(!((inputFile->fileHeader)->numFields))
+		maxIndex = (inputFile->fileHeader)->maxFields - 1;
+	else
+		maxIndex = (inputFile->fileHeader)->numFields - 1;
+
+	/*printf("minIndex = %d && maxIndex = %d\n", minIndex, maxIndex);
+	printf("idVar = %d\n", idVar);
+	printf("groupVar = %d\n", groupVar);
+	printf("numericVar = %d\n", numericVar); */
+
+
+	// Check parameters passed
+	if( (idVar != -1) && ((idVar < minIndex) || (idVar > maxIndex) )) return NULL;
+	if( (groupVar != -1) && ((groupVar < minIndex) || (groupVar > maxIndex) )) return NULL;
+	if( (numericVar != -1) && ((numericVar < minIndex) || (numericVar > maxIndex) )) return NULL;
+
+	TposeQuery* tposeQuery;
+	/* Allocate memory for the query parameters */
+	if((tposeQuery = (TposeQuery*) malloc(sizeof(TposeQuery))) == NULL ) {
+		printf("tposeIOQueryAlloc: malloc error\n");
+		exit(EXIT_FAILURE);
+	}
+	
+	tposeQuery->inputFile = inputFile;
+	tposeQuery->outputFile = outputFile;
+	tposeQuery->aggregator = NULL;
+	if(idVar != -1) tposeQuery->id = idVar;
+	if(groupVar != -1) tposeQuery->group = groupVar;
+	if(numericVar != -1) tposeQuery->numeric = numericVar;
 
 	/*printf("*** Initialised query id = %d\n", tposeQuery->id);
 	printf("*** Initialised query group = %d\n", tposeQuery->group);

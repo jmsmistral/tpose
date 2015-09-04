@@ -126,6 +126,7 @@
 	void tposeIOAggregatorFree(TposeAggregator** tposeAggregatorPtr);
 
 	TposeQuery* tposeIOQueryAlloc(TposeInputFile* inputFile, TposeOutputFile* outputFile, char* idVar, char* groupVar, char* numericVar);
+	TposeQuery* tposeIOQueryIndexedAlloc(TposeInputFile* inputFile, TposeOutputFile* outputFile, int idVar, int groupVar, int numericVar);
 	void tposeIOQueryFree(TposeQuery** tposeQueryPtr);
 
 

@@ -76,6 +76,9 @@ int main(
 	char* idArg = NULL;
 	char* groupArg = NULL;
 	char* numericArg = NULL;
+	int idIndexedArg = -1;
+	int groupIndexedArg = -1;
+	int numericIndexedArg = -1;
 
 	bool delimiterSpecified = false;
 
@@ -119,17 +122,14 @@ int main(
 			case 'x':
 				idFlag = 1;
 				idArg = strdup(optarg);
-				tposeIOLowerCase(idArg);
 				break;
 			case 'y':
 				groupFlag = 1;
 				groupArg = strdup(optarg);
-				tposeIOLowerCase(groupArg);
 				break;
 			case 'z':
 				numericFlag = 1;
 				numericArg = strdup(optarg);
-				tposeIOLowerCase(numericArg);
 				break;
 			case 'h':
 				printHelp(0);
@@ -210,16 +210,41 @@ int main(
 
 	/*printf("DELIMITER = '%c'\n", delimiter); */
 
-	//Check id variable
-	//printf("ID = %s\n", idArg);
+	// Process id, group, numeric options depending on non-indexed/indexed
+	if(!indexedFlag) {
+		tposeIOLowerCase(idArg);
+		tposeIOLowerCase(groupArg);
+		tposeIOLowerCase(numericArg);
+ 	}
+	else {
+		
+		if( idFlag && ((idIndexedArg = stringToInteger(idArg)) == -1)) {
+			fprintf(stderr, "--indexed option requires a positive integer value for id field\n");
+			printHelp(1);
+			exit(EXIT_FAILURE);
+		}
 
-	//Check group variable
-	//printf("GROUP = %s\n", groupArg);
-	
-	//Check numeric variable
-	//printf("NUMERIC = %s\n", numericArg); 
+		if( groupFlag && ((groupIndexedArg = stringToInteger(groupArg)) == -1)) {
+			fprintf(stderr, "--indexed option requires a positive integer value for group field\n");
+			printHelp(1);
+			exit(EXIT_FAILURE);
+		}
+
+		if( numericFlag && ((numericIndexedArg = stringToInteger(numericArg)) == -1)) {
+			fprintf(stderr, "--indexed option requires a postive integer value for numeric option\n");
+			printHelp(1);
+			exit(EXIT_FAILURE);
+		}
+		
+		/*printf("idIndexedArg = %d\n", idIndexedArg);
+		printf("groupIndexedArg = %d\n", groupIndexedArg);
+		printf("numericIndexedArg = %d\n", numericIndexedArg);*/
+
+	}
 	
 
+
+	// Check that option dependencies have been specified
 	if(groupFlag && !numericFlag) {
 		fprintf(stderr, "NUMERIC field needs to be specified (see --numeric option)\n");
 		printHelp(1);
@@ -241,30 +266,44 @@ int main(
 	if(!groupFlag && !numericFlag && !idFlag)
 		mutateHeader = 0; // Don't need to read header for simple transpose
 	
-	printf("input: %s\n", inputFilePath); 
-	printf("output: %s\n", outputFilePath); 
+	/*printf("input: %s\n", inputFilePath); 
+	printf("output: %s\n", outputFilePath); */
 
 
 
 	/* Event-loop */
 	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
 	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
+
+	// Create query
 	TposeQuery* tposeQuery;
-	if((tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg)) == NULL) {
-		fprintf(stderr, "--id, --group, or --numeric parameters do not match input fields\n");
-		printHelp(1);
-		exit(EXIT_FAILURE);
+	if(!indexedFlag) {
+		//printf("non-indexed\n");
+		if((tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg)) == NULL) {
+			fprintf(stderr, "--id, --group, or --numeric parameters do not match input fields\n");
+			printHelp(1);
+			exit(EXIT_FAILURE);
+		}
 	}
+	else {
+		//printf("indexed\n");
+		if((tposeQuery = tposeIOQueryIndexedAlloc(inputFile, outputFile, idIndexedArg, groupIndexedArg, numericIndexedArg)) == NULL) {
+			fprintf(stderr, "--id, --group, or --numeric parameters do not match input fields\n");
+			printHelp(1);
+			exit(EXIT_FAILURE);
+		}
+	}
+
 	
 	// Transpose Simple
 	if(!groupFlag && !numericFlag && !idFlag) {
-		printf("Transpose Simple\n");
+		//printf("Transpose Simple\n");
 		tposeIOTransposeSimple(tposeQuery);
 	}
 
 	// Transpose Group
 	if(groupFlag && numericFlag && !idFlag) {
-		printf("Transpose Group\n");
+		//printf("Transpose Group\n");
 		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOgetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroup(tposeQuery, btree);
@@ -274,7 +313,7 @@ int main(
 	
 	// Transpose Group Id
 	if(groupFlag && numericFlag && idFlag) {
-		printf("Transpose Group Id\n");
+		//printf("Transpose Group Id\n");
 		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOgetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroupId(tposeQuery, btree);

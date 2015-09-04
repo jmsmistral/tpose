@@ -121,3 +121,38 @@ close_stdout (void)
    if (close_stream (stderr) != 0)
      exit(EXIT_FAILURE);
 }
+
+
+
+int stringToInteger
+(
+	char* string
+) {
+
+	char* tail;
+	int val = 0;
+
+	if((*string == '\0') || (string == NULL))
+		return -1;
+
+	errno = 0;
+
+	val = strtol(string, &tail, 0);
+
+	if(errno) {
+		printf("Error - You have entered a very large value!\n");
+		return -1; // Overflow
+	}
+	else {
+		if(/*val == 0 &&*/ tail != NULL && *tail != '\0') {
+			printf("tail = %s\n", tail);
+			return -1;
+		}
+		else
+			return val;
+		//string = tail;
+	}
+		
+}
+
+

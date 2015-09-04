@@ -52,9 +52,11 @@ extern void set_program_name (const char *argv0);
 
 #define STREQ(a, b) (*(a) == *(b) && strcmp((a), (b)) == 0)
 
-int close_stream (FILE *stream);
-void close_stdout_set_file_name (const char *file);
-void close_stdout_set_ignore_EPIPE (bool ignore);
-void close_stdout (void);
+int stringToInteger(char* string);
+
+int close_stream(FILE *stream);
+void close_stdout_set_file_name(const char *file);
+void close_stdout_set_ignore_EPIPE(bool ignore);
+void close_stdout(void);
 
 #endif /* TPOSE_UTIL_H */
