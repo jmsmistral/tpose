@@ -200,13 +200,13 @@ int main(
 	}
 
 	if (!delimiterSpecified) {
-		fprintf(stdout, "No field delimiter character specified, using TAB as default\n");
+		//fprintf(stdout, "No field delimiter character specified, using TAB as default\n");
 		delimiter = '\t';
 	}
 
 	/*printf("DELIMITER = '%c'\n", delimiter); */
 
-	//Check group variable
+	//Check id variable
 	//printf("ID = %s\n", idArg);
 
 	//Check group variable
@@ -214,6 +214,18 @@ int main(
 	
 	//Check numeric variable
 	//printf("NUMERIC = %s\n", numericArg); 
+
+	if(groupFlag && !numericFlag) {
+		fprintf(stderr, "NUMERIC field needs to be specified (see --numeric option)\n");
+		printHelp(1);
+		abort();
+	}
+
+	if(idFlag && !groupFlag && !numericFlag) {
+		fprintf(stderr, "GROUP and NUMERIC fields need to be specified (see --group, and --numeric options)\n");
+		printHelp(1);
+		abort();
+	}
 	
 	// Check output file (if empty, use stdout)
 	if(!outputFilePath) {
@@ -222,10 +234,12 @@ int main(
 
 	unsigned int mutateHeader = 1;
 	if(!groupFlag && !numericFlag && !idFlag)
-		mutateHeader = 0;
+		mutateHeader = 0; // Don't need to read header for simple transpose
 	
 	printf("input: %s\n", inputFilePath); 
 	printf("output: %s\n", outputFilePath); 
+
+
 
 	/* Event-loop */
 	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
