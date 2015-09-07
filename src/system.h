@@ -24,7 +24,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <assert.h>
-#include <error.h>
 #include <errno.h>
 
 
