@@ -1,4 +1,4 @@
-/* util.h: program-specific utility functions
+/* util.h: program-specific utilities interface
 
    Copyright 2015 Jonathan Sacramento.
 
@@ -13,7 +13,8 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  
+*/
 
 #ifndef TPOSE_UTIL_H
 # define TPOSE_UTIL_H

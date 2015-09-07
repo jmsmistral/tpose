@@ -1,4 +1,4 @@
-/* tpose_io.h: tpose input/output declarations; 
+/* tpose_io.h: tpose input/output interface; 
 
    Copyright 2015 Jonathan Sacramento.
 
@@ -20,18 +20,26 @@
 #define _TPOSE_IO_H_
 
 
-	#include <string.h>
+	#include <unistd.h>
+	#include <stdlib.h>
+	#include <stdio.h>
+	#include <fcntl.h>
 	#include <sys/mman.h>
 	#include <sys/stat.h>
-	#include <stdio.h>
-	#include <stdlib.h>
+	#include <ctype.h>
+	#include <string.h>
 	#include <assert.h>
 	#include <errno.h>
-	#include <unistd.h>
-	#include <fcntl.h>
-	#include <ctype.h>
 
 	#include "btree.h"
+
+
+#ifdef TPOSE_DEBUG
+#define debug_print(...) \
+     do { fprintf(stderr, __VA_ARGS__); } while (0)
+#else
+#define debug_print(...)
+#endif
 
 
 	/**

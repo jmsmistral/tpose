@@ -142,14 +142,7 @@ int main(
 				exit (EXIT_SUCCESS);
 				break;
 			case '?':
-				/*if (optopt == 'c')
-					fprintf(stderr, "Option -%c requires an argument.\n", optopt);
-				else if (isprint(optopt))
-					fprintf(stderr, "Unknown option '-%c'.\n", optopt);
-				else
-					fprintf(stderr, "Unknown option character '\\x%x'.\n", optopt);
-				return 1; */
-				fprintf(stderr, "Missing option or argument. optopt = %c\n", optopt);
+				fprintf(stderr, "Missing option or argument.\n");
 				printHelp(1);
 				abort;
 			default:
@@ -159,13 +152,8 @@ int main(
 	}
 
 	/* Get input/output file */
-	//printf("optind = %d && argc = %d\n", optind, argc);
 	if(optind < argc) {
 		for (iArg = optind; iArg < argc; ++iArg) {
-
-			/*printf("iArg = %d\n", iArg);
-			printf("argv[iArg] = %s\n", argv[iArg]);
-			printf("fileArg = %d\n", fileArg);*/
 
 			if(fileArg == 0)
 				inputFilePath = argv[iArg];
@@ -208,7 +196,6 @@ int main(
 		delimiter = '\t';
 	}
 
-	/*printf("DELIMITER = '%c'\n", delimiter); */
 
 	// Process id, group, numeric options depending on non-indexed/indexed
 	if(!indexedFlag) {
@@ -236,10 +223,6 @@ int main(
 			exit(EXIT_FAILURE);
 		}
 		
-		/*printf("idIndexedArg = %d\n", idIndexedArg);
-		printf("groupIndexedArg = %d\n", groupIndexedArg);
-		printf("numericIndexedArg = %d\n", numericIndexedArg);*/
-
 	}
 	
 
@@ -266,19 +249,16 @@ int main(
 	if(!groupFlag && !numericFlag && !idFlag)
 		mutateHeader = 0; // Don't need to read header for simple transpose
 	
-	/*printf("input: %s\n", inputFilePath); 
-	printf("output: %s\n", outputFilePath); */
 
 
 
-	/* Event-loop */
+	/* Core */
 	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
 	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
 
 	// Create query
 	TposeQuery* tposeQuery;
 	if(!indexedFlag) {
-		//printf("non-indexed\n");
 		if((tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg)) == NULL) {
 			fprintf(stderr, "--id, --group, or --numeric parameters do not match input fields\n");
 			printHelp(1);
@@ -286,7 +266,6 @@ int main(
 		}
 	}
 	else {
-		//printf("indexed\n");
 		if((tposeQuery = tposeIOQueryIndexedAlloc(inputFile, outputFile, idIndexedArg, groupIndexedArg, numericIndexedArg)) == NULL) {
 			fprintf(stderr, "--id, --group, or --numeric parameters do not match input fields\n");
 			printHelp(1);
@@ -296,14 +275,11 @@ int main(
 
 	
 	// Transpose Simple
-	if(!groupFlag && !numericFlag && !idFlag) {
-		//printf("Transpose Simple\n");
+	if(!groupFlag && !numericFlag && !idFlag)
 		tposeIOTransposeSimple(tposeQuery);
-	}
 
 	// Transpose Group
 	if(groupFlag && numericFlag && !idFlag) {
-		//printf("Transpose Group\n");
 		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOgetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroup(tposeQuery, btree);
@@ -313,7 +289,6 @@ int main(
 	
 	// Transpose Group Id
 	if(groupFlag && numericFlag && idFlag) {
-		//printf("Transpose Group Id\n");
 		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOgetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroupId(tposeQuery, btree);
