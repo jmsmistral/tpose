@@ -11,8 +11,19 @@ endif
 
 gcc = $(compiler)
 
-$(prog): $(obj) 
+PREFIX = /usr/local
+
+$(prog): $(src) 
 	$(gcc) -o $(prog) $(src) 
+
+.PHONY: install
+install:
+	mkdir -p	$(DESTDIR)$(PREFIX)/bin
+	cp $(prog) $(DESTDIR)$(PREFIX)/bin/$(prog)
+
+.PHONY: uninstall
+uninstall:
+	rm -f	$(DESTDIR)$(PREFIX)/bin/$(prog)
 
 .PHONY: clean
 clean:
