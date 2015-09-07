@@ -30,6 +30,7 @@
 	#include <errno.h>
 	#include <unistd.h>
 	#include <fcntl.h>
+	#include <ctype.h>
 
 	#include "btree.h"
 
@@ -140,8 +141,8 @@
 	void tposeIOTransposeGroupId(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOPrintGroupIdHeader(TposeQuery* tposeQuery);
 	void tposeIOPrintGroupIdData(char* id, TposeQuery* tposeQuery);
-	//int tposeIOGetFieldIndex(TposeHeader* tposeHeader, char* field); 
-	//char* tposeIOLowerCase(char* string);
+	int tposeIOGetFieldIndex(TposeHeader* tposeHeader, char* field); 
+	char* tposeIOLowerCase(char* string);
 
 
 #endif /* TPOSE_IO_H */

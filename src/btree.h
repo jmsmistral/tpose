@@ -133,7 +133,7 @@ void btreeForEach(BTree* btree, queueNodeCallback callbackPtr);
 BTreeQueue* populateBTreeQueueBFS(BTree* btree);
 void setQueueNode(BTreeQueueNode*, BTreeNode*, BTreeNode*, unsigned int, unsigned int);
 void addQueueNode(BTreeQueue*, BTreeQueueNode*);
-void btreeSetKey(BTreeKey* key, off_t keyValue, off_t dataOffset, off_t dataLength);
+void btreeSetKeyValue(BTreeKey* key, off_t keyValue, off_t dataOffset, off_t dataLength);
 void btreePrintNode(BTreeNode* node, const char* label, const unsigned int visited);
 
 /* btree macros */
