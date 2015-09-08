@@ -10,11 +10,12 @@ else
 endif
 
 gcc = $(compiler)
+flags = #-DTPOSE_DEBUG=1
 
 PREFIX = /usr/local
 
 $(prog): $(src) 
-	$(gcc) -o $(prog) $(src) 
+	$(gcc) -o $(prog) $(src) $(flags)
 
 .PHONY: install
 install:
