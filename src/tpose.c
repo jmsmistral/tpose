@@ -250,8 +250,6 @@ int main(
 		mutateHeader = 0; // Don't need to read header for simple transpose
 	
 
-
-
 	/* Core */
 	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
 	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
@@ -275,8 +273,9 @@ int main(
 
 	
 	// Transpose Simple
-	if(!groupFlag && !numericFlag && !idFlag)
+	if(!groupFlag && !numericFlag && !idFlag) {
 		tposeIOTransposeSimple(tposeQuery);
+	}
 
 	// Transpose Group
 	if(groupFlag && numericFlag && !idFlag) {

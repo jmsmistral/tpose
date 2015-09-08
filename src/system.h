@@ -37,4 +37,12 @@
 /*#include <wchar.h>
 #include <wctype.h>*/
 
+/* Debug-mode printing */
+#ifdef TPOSE_DEBUG
+#define debug_print(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define debug_print(...)
+#endif
+     /*do { fprintf(stderr, __VA_ARGS__); } while (0);*/
+
 #endif /* TPOSE_SYSTEM_H */

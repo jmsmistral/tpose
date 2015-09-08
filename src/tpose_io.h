@@ -19,27 +19,13 @@
 #ifndef _TPOSE_IO_H_
 #define _TPOSE_IO_H_
 
-
-	#include <unistd.h>
-	#include <stdlib.h>
-	#include <stdio.h>
 	#include <fcntl.h>
 	#include <sys/mman.h>
 	#include <sys/stat.h>
 	#include <ctype.h>
-	#include <string.h>
-	#include <assert.h>
-	#include <errno.h>
 
+	#include "system.h"
 	#include "btree.h"
-
-
-#ifdef TPOSE_DEBUG
-#define debug_print(...) \
-     do { fprintf(stderr, __VA_ARGS__); } while (0)
-#else
-#define debug_print(...)
-#endif
 
 
 	/**
@@ -127,7 +113,7 @@
 
 
 	/* General */
-	TposeHeader* tposeIOHeaderAlloc(unsigned int maxFields);
+	TposeHeader* tposeIOHeaderAlloc(unsigned int maxFields, unsigned int mutateHeader);
 	void tposeIOHeaderFree(TposeHeader** tposeHeaderPtr);
 
 	TposeAggregator* tposeIOAggregatorAlloc(unsigned int numFields);

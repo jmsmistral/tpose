@@ -17,14 +17,9 @@
 #include<sys/uio.h> /* struct iovec */
 #include<assert.h>
 
+#include "system.h"
 
 
-#ifdef BTREE_DEBUG
-#define debug_print(...) \
-     do { fprintf(stderr, __VA_ARGS__); } while (0)
-#else
-#define debug_print(...)
-#endif
 
 /**
  ** Implementation limits

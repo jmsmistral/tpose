@@ -65,7 +65,6 @@ int tposeIOGetFieldIndex(
 	int i;
 	for(i = 0; i < numFields; i++) {
 		if(!strcmp(field, *(tposeHeader->fields+i))) {
-			debug_print("i = %d\n", i);
 			foundFlag = 1;
 			break;
 		}
@@ -75,10 +74,10 @@ int tposeIOGetFieldIndex(
 		return -1; // Not found
 
 
-	debug_print("tposeIOGetFieldIndex found flag =  %d\n", foundFlag);
-	debug_print("tposeIOGetFieldIndex search field =  %s\n", field);
-	debug_print("tposeIOGetFieldIndex numFields = %d\n", numFields);
-	debug_print("broken out @ i = %d\n", i);
+	debug_print("tposeIOGetFieldIndex(): found flag =  %d\n", foundFlag);
+	debug_print("tposeIOGetFieldIndex(): search field =  %s\n", field);
+	debug_print("tposeIOGetFieldIndex(): numFields = %d\n", numFields);
+	debug_print("tposeIOGetFieldIndex(): broken out @ i = %d\n", i);
 
 	return i; 
 	
@@ -100,7 +99,7 @@ TposeInputFile* tposeIOInputFileAlloc(
 
 	/* Allocate memory for the field names */
 	if((inputFile = (TposeInputFile*) malloc(sizeof(TposeInputFile))) == NULL ) {
-		printf("tposeIOFileAlloc: malloc error\n");
+		printf("tposeIOFileAlloc(): malloc error\n");
 		return NULL;
 	}
 
@@ -114,6 +113,8 @@ TposeInputFile* tposeIOInputFileAlloc(
 	assert(inputFile->fileAddr != NULL);
 	assert(inputFile->fileSize != 0);
 	//assert(tposeFile->fieldDelimiter != '');
+	
+	debug_print("tposeIOInputFileAlloc(): fileAddr = \n%s\n", inputFile->fileAddr);
 
 	return inputFile;
 	
@@ -128,7 +129,7 @@ void tposeIOInputFileFree(
     TposeInputFile** inputFilePtr
 ) {
 
-	debug_print("tposeIOFileFree: Freeing TposeInputFile memory...\n");
+	debug_print("tposeIOFileFree(): Freeing TposeInputFile memory...\n");
 
 	tposeIOHeaderFree(&((*inputFilePtr)->fileHeader));
     
@@ -139,7 +140,7 @@ void tposeIOInputFileFree(
 
    assert(*inputFilePtr == NULL);
 
-   debug_print("tposeIOFileFree: TposeInputFile has been freed!\n");
+   debug_print("tposeIOFileFree(): TposeInputFile has been freed!\n");
 }
 
 
@@ -157,7 +158,7 @@ TposeOutputFile* tposeIOOutputFileAlloc(
 
 	/* Allocate memory for the field names */
 	if((outputFile = (TposeOutputFile*) malloc(sizeof(TposeOutputFile))) == NULL ) {
-		printf("tposeIOOutputFileAlloc: malloc error\n");
+		printf("tposeIOOutputFileAlloc(): malloc error\n");
 		return NULL;
 	}
 
@@ -181,7 +182,7 @@ void tposeIOOutputFileFree(
     TposeOutputFile** outputFilePtr
 ) {
 
-	debug_print("tposeIOFileFree: Freeing TposeInputFile memory...\n");
+	debug_print("tposeIOFileFree(): Freeing TposeInputFile memory...\n");
 
 	if( (*outputFilePtr)->fileIdHeader != NULL)
 		tposeIOHeaderFree(&((*outputFilePtr)->fileIdHeader));
@@ -196,7 +197,7 @@ void tposeIOOutputFileFree(
 
    assert(*outputFilePtr == NULL);
    
-   debug_print("tposeIOFileFree: TposeInputFile has been freed!\n");
+   debug_print("tposeIOFileFree(): TposeInputFile has been freed!\n");
 }
 
 
@@ -206,29 +207,36 @@ void tposeIOOutputFileFree(
  **/
 TposeHeader* tposeIOHeaderAlloc(
 	unsigned int maxFields
+	,unsigned int mutateHeader
 ) {
 	
-	debug_print("tposeIOHeaderAlloc: maxFields = %u\n", numFields);
+	debug_print("tposeIOHeaderAlloc(): Allocating memory for TposeHeader with maxFields = %u\n", maxFields);
 
 	TposeHeader* tposeHeader;
 
 	/* Allocate memory for the field names */
 	if((tposeHeader = (TposeHeader*) malloc(sizeof(TposeHeader))) == NULL ) {
-		printf("tposeIOHeaderAlloc: malloc error\n");
+		printf("tposeIOHeaderAlloc(): malloc error\n");
 		return NULL;
 	}
 
-	if((tposeHeader->fields = (char**) malloc(maxFields * sizeof(char*))) == NULL ) {
-		printf("tposeIOHeaderAlloc: malloc error\n");
-		return NULL;
+	if(mutateHeader) {
+		if((tposeHeader->fields = (char**) malloc(maxFields * sizeof(char*))) == NULL ) {
+			printf("tposeIOHeaderAlloc(): malloc error\n");
+			return NULL;
+		}
+	}
+	else {
+		tposeHeader->fields = NULL;
 	}
 
 	tposeHeader->maxFields = maxFields;
 	tposeHeader->numFields = 0;
 	
-	//assert(tposeHeader->fields != NULL); // Can be NULL if !mutateHeader
 	assert(tposeHeader->maxFields != 0);
 	assert(tposeHeader->numFields == 0);
+
+	debug_print("tposeIOHeaderAlloc(): TposeHeader memory allocated\n");
 
 	return tposeHeader;
 	
@@ -243,7 +251,7 @@ void tposeIOHeaderFree(
     TposeHeader** tposeHeaderPtr
 ) {
 
-	debug_print("tposeIOHeaderFree: Freeing TposeHeader memory...\n");
+	debug_print("tposeIOHeaderFree(): Freeing TposeHeader memory...\n");
 
 	int field;
 	if((*tposeHeaderPtr)->fields != NULL) {
@@ -255,17 +263,17 @@ void tposeIOHeaderFree(
 		(*tposeHeaderPtr)->fields = NULL;
 	}
     
-    assert((*tposeHeaderPtr)->fields == NULL);
-    debug_print("tposeIOHeaderFree: TposeHeader variables have been freed!\n");
+	assert((*tposeHeaderPtr)->fields == NULL);
+	debug_print("tposeIOHeaderFree(): TposeHeader variables have been freed!\n");
 
-    if(*tposeHeaderPtr != NULL) {
-        free(*tposeHeaderPtr);
-        *tposeHeaderPtr = NULL;
-    }
+	if(*tposeHeaderPtr != NULL) {
+		free(*tposeHeaderPtr);
+		*tposeHeaderPtr = NULL;
+	}
 
-    assert(*tposeHeaderPtr == NULL);
+	assert(*tposeHeaderPtr == NULL);
 
-    debug_print("tposeIOHeaderFree: TposeHeader has been freed!\n");
+	debug_print("tposeIOHeaderFree(): TposeHeader has been freed!\n");
     
 }
 
@@ -277,16 +285,18 @@ void tposeIOHeaderFree(
 TposeAggregator* tposeIOAggregatorAlloc(unsigned int numFields)
 {
 
+	debug_print("tposeIOAggregatorAlloc(): Allocating memory for TposeAggregator\n");
+
 	TposeAggregator* tposeAggregator;
 
 	/* Allocate memory for the floating-point numeric variables being transposed */
 	if((tposeAggregator = (TposeAggregator*) calloc(1, sizeof(TposeAggregator))) == NULL ) {
-		printf("tposeIOAggregatorAlloc: calloc error\n");
+		printf("tposeIOAggregatorAlloc(): calloc error\n");
 		return NULL;
 	}
 
 	if((tposeAggregator->aggregates = (double*) calloc(numFields, sizeof(double))) == NULL ) {
-		printf("tposeIOAggregatorAlloc: calloc error\n");
+		printf("tposeIOAggregatorAlloc(): calloc error\n");
 		return NULL;
 	}
 
@@ -294,6 +304,8 @@ TposeAggregator* tposeIOAggregatorAlloc(unsigned int numFields)
 	
 	assert(tposeAggregator->aggregates != NULL);
 	assert(tposeAggregator->numFields != 0);
+
+	debug_print("tposeIOAggregatorAlloc(): TposeAggregator memory allocated\n");
 
 	return tposeAggregator;
 	
@@ -308,12 +320,10 @@ void tposeIOAggregatorFree(
     TposeAggregator** tposeAggregatorPtr
 ) {
 
+	debug_print("tposeIOAggregatorFree(): Freeing TposeAggregator memory...\n");
+
 	int value;
 	if((*tposeAggregatorPtr)->aggregates != NULL) {
-		//for(value = 0; value < (*tposeAggregatorPtr)->numFields; value++) {
-			//free((*tposeAggregatorPtr)->aggregates[value]);
-		//} 
-
 		free((*tposeAggregatorPtr)->aggregates);
 		(*tposeAggregatorPtr)->aggregates = NULL;
 	}
@@ -325,7 +335,9 @@ void tposeIOAggregatorFree(
         *tposeAggregatorPtr = NULL;
     }
 
-    assert(*tposeAggregatorPtr == NULL);
+	assert(*tposeAggregatorPtr == NULL);
+
+	debug_print("tposeIOAggregatorFree(): TposeAggregator has been freed!\n");
     
 }
 
@@ -343,6 +355,8 @@ TposeQuery* tposeIOQueryAlloc(
 	,char* numericVar
 ) {
 
+	debug_print("tposeIOQueryAlloc(): Allocating memory for TposeQuery\n");
+
 	// Check parameters passed
 	if((idVar != NULL) && (tposeIOGetFieldIndex(inputFile->fileHeader, idVar) == -1)) return NULL;
 	if((groupVar != NULL) && (tposeIOGetFieldIndex(inputFile->fileHeader, groupVar) == -1)) return NULL;
@@ -359,9 +373,18 @@ TposeQuery* tposeIOQueryAlloc(
 	tposeQuery->inputFile = inputFile;
 	tposeQuery->outputFile = outputFile;
 	tposeQuery->aggregator = NULL;
+	tposeQuery->id = -1;
+	tposeQuery->group = -1;
+	tposeQuery->numeric = -1;
 	if(idVar != NULL) tposeQuery->id = tposeIOGetFieldIndex(inputFile->fileHeader, idVar);
 	if(groupVar != NULL) tposeQuery->group = tposeIOGetFieldIndex(inputFile->fileHeader, groupVar);
 	if(numericVar != NULL) tposeQuery->numeric = tposeIOGetFieldIndex(inputFile->fileHeader, numericVar);
+
+	debug_print("tposeIOQueryAlloc(): id = %d\n", tposeQuery->id);
+	debug_print("tposeIOQueryAlloc(): group = %d\n", tposeQuery->group);
+	debug_print("tposeIOQueryAlloc(): numeric = %d\n", tposeQuery->numeric);
+
+	debug_print("tposeIOQueryAlloc(): TposeQuery memory allocated\n");
 
 	return tposeQuery;
 	
@@ -380,6 +403,8 @@ TposeQuery* tposeIOQueryIndexedAlloc(
 	,int groupVar
 	,int numericVar
 ) {
+
+	debug_print("tposeIOQueryIndexedAlloc(): Allocating memory for TposeQuery\n");
 
 	// Correct field indexes so they're zero-based
 	if(idVar != -1) --idVar;
@@ -415,6 +440,8 @@ TposeQuery* tposeIOQueryIndexedAlloc(
 	if(idVar != -1) tposeQuery->id = idVar;
 	if(groupVar != -1) tposeQuery->group = groupVar;
 	if(numericVar != -1) tposeQuery->numeric = numericVar;
+
+	debug_print("tposeIOQueryIndexedAlloc(): TposeQuery memory allocated\n");
 
 	return tposeQuery;
 	
@@ -484,11 +511,11 @@ TposeInputFile* tposeIOOpenInputFile(
 		printf("Warning: tposeIOOpenInputFile - cannot advise kernel on file %s\n", filePath);
 	}
 
-	debug_print("tposeIOOpenInputFile(): opened input file %s\n", filePath);
 
+	debug_print("tposeIOOpenInputFile(): mutateHeader for input file? =  %u\n", mutateHeader);
 	TposeInputFile* inputFile = tposeIOInputFileAlloc(fd, fileAddr, fileSize, fieldDelimiter); // Creates the file handle 
 	inputFile->fileHeader = tposeIOReadInputHeader(inputFile, mutateHeader); // Opening a file also creates the TposeHeader struct
-
+	debug_print("tposeIOOpenInputFile(): Input file opened!  %s\n", filePath);
 	return inputFile;
 
 }
@@ -499,23 +526,23 @@ TposeInputFile* tposeIOOpenInputFile(
  ** Close an input file and unmap any memory
  **/
 int tposeIOCloseInputFile(
-	TposeInputFile* tposeFile
+	TposeInputFile* inputFile
 ) {
 
-   if((munmap(tposeFile->fileAddr, tposeFile->fileSize)) < 0) {
+   if((munmap(inputFile->fileAddr, inputFile->fileSize)) < 0) {
        printf("Error: tposeIOCloseInputFile - can not unmap file\n");
        return -1;
    }
 
-   if(close(tposeFile->fd) < 0) {
+   if(close(inputFile->fd) < 0) {
        printf("Error: tposeIOCloseInputFile - can not close file\n");
        return -1;
    }
 
 	// Free TposeInputFile memory
-	tposeIOInputFileFree(&tposeFile);
+	tposeIOInputFileFree(&inputFile);
 
-	debug_print("tposeIOCloseInputFile(): closed input file\n");
+	debug_print("tposeIOCloseInputFile(): Input file closed!\n");
     
 	return 0;
 
@@ -531,7 +558,6 @@ TposeOutputFile* tposeIOOpenOutputFile(
 	,unsigned char fieldDelimiter
 ) {
 
-	//int fd;
 	FILE* fd;
 	if(strcmp(filePath, "stdout")) {
 		if((fd = fopen(filePath, "wa" )) == NULL) {
@@ -542,8 +568,8 @@ TposeOutputFile* tposeIOOpenOutputFile(
 	else
 		fd = stdout; // If no output file is passed, print to std output
 
-	debug_print("tposeIOOpenOutputFile(): opened output file %s\n", filePath);
-
+	debug_print("tposeIOOpenOutputFile(): Output file opened! %s\n", filePath);
+	
 	return tposeIOOutputFileAlloc(fd, fieldDelimiter); // Creates the file handle 
 
 }
@@ -566,7 +592,7 @@ int tposeIOCloseOutputFile(
 	// Free TposeOutputFile memory
 	tposeIOOutputFileFree(&outputFile);
 
-	debug_print("tposeIOCloseOutputFile(): closed output file\n");
+	debug_print("tposeIOCloseOutputFile(): Output file closed!\n");
     
 	return 0;
 
@@ -604,7 +630,7 @@ TposeHeader* tposeIOReadInputHeader(
 	if(fieldCount > 0)
 		fieldCount++; // Quick hack to get real number of fields
 
-	TposeHeader* header = tposeIOHeaderAlloc(fieldCount); // Allocate the needed memory
+	TposeHeader* header = tposeIOHeaderAlloc(fieldCount, mutateHeader); // Allocate the needed memory
 
 	if(mutateHeader) {
 		// Find index of first row delimiter
@@ -631,6 +657,12 @@ TposeHeader* tposeIOReadInputHeader(
 		free(rowtok);
 	}
 
+	/*int j;
+	for(j=0;j<fieldCount;++j)
+		debug_print("tposeIOReadInputHeader(): %s\n", *(header->fields+j));*/
+
+	debug_print("tposeIOReadInputHeader(): Input file header read!\n");
+
 	return header;
 
 }
@@ -650,8 +682,9 @@ void tposeIOgetUniqueGroups(
 	char* fieldSavePtr;
 	char tempString[TPOSE_IO_MAX_FIELD_WIDTH];
 	char* allocString;
+	unsigned int mutateHeader = 1; // Allow for header row to be modified
 
-	TposeHeader* header = tposeIOHeaderAlloc(TPOSE_IO_MAX_FIELDS); // Allocate the needed memory
+	TposeHeader* header = tposeIOHeaderAlloc(TPOSE_IO_MAX_FIELDS, mutateHeader); // Allocate the needed memory
 	BTreeKey* key = btreeKeyAlloc();
 	BTreeKey* resultKey;
 	
@@ -738,6 +771,8 @@ void tposeIOgetUniqueGroups(
 	}
 
 	btreeKeyFree(&key);
+
+	debug_print("tposeIOgetUniqueGroups(): Computed unique groups from input file\n");
 	
 	// Assign groups to output file header 
 	(tposeQuery->outputFile)->fileGroupHeader = header; 
@@ -764,8 +799,6 @@ void tposeIOTransposeSimple(
 	unsigned long currentField = 0;
 	unsigned long numFields = ((tposeQuery->inputFile)->fileHeader)->maxFields;
 
-	fieldSavePtr = (tposeQuery->inputFile)->fileAddr; // Init with ptr to first row (no group/id in this transpose method)
-
 	// Main loop
 	for(currentField = 0; currentField < numFields; ++currentField) {
 		fieldSavePtr = (tposeQuery->inputFile)->fileAddr; // Re-initialise to start again
@@ -781,8 +814,9 @@ void tposeIOTransposeSimple(
 			}
 
 			if(*fieldSavePtr == rowDelimiter) {
-				// Aggregate value for each group
+				// Print out value
 				fprintf((tposeQuery->outputFile)->fd, "%s%c", fieldTempString, fieldDelimiter);
+				fflush((tposeQuery->outputFile)->fd); // Ensure output is printed
 					
 				// Reset flags for next row
 				fieldCount = 0;
@@ -793,10 +827,10 @@ void tposeIOTransposeSimple(
 			}
 			
 			// Track current group field
-			if(fieldCount == currentField)  { // if group value is empty string we ignore
+			if((totalCharCount != (tposeQuery->inputFile)->fileSize) && (fieldCount == currentField))  { // if group value is empty string we ignore
 
 				// Get group field value
-				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+				while((*fieldSavePtr != fieldDelimiter) && (*fieldSavePtr != rowDelimiter)) {
 					fieldTempString[fieldCharCount++] = *fieldSavePtr++;
 					++totalCharCount;
 				}
@@ -823,8 +857,12 @@ void tposeIOTransposeSimple(
 		} // End while-loop
 
 		fprintf((tposeQuery->outputFile)->fd, "%c", rowDelimiter); // Output a new line after each iteration
+		fflush((tposeQuery->outputFile)->fd); // Ensure output is printed
+		
 	
 	} // End for-loop
+
+	debug_print("tposeIOTransposeSimple(): run tranpose!\n");
 
 }
 
@@ -949,6 +987,8 @@ void tposeIOTransposeGroup(
 		++totalCharCount;
 
 	}
+
+	debug_print("tposeIOTransposeGroup(): run tranpose!\n");
 
 }
 
@@ -1131,6 +1171,8 @@ void tposeIOTransposeGroupId(
 
 	// Print last line
 	tposeIOPrintGroupIdData(idCurrentString, tposeQuery);
+
+	debug_print("tposeIOTransposeGroupId(): run tranpose!\n");
 
 }
 
