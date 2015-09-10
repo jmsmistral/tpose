@@ -814,9 +814,13 @@ void tposeIOTransposeSimple(
 			}
 
 			if(*fieldSavePtr == rowDelimiter) {
-				// Print out value
-				fprintf((tposeQuery->outputFile)->fd, "%s%c", fieldTempString, fieldDelimiter);
-				fflush((tposeQuery->outputFile)->fd); // Ensure output is printed
+				//printf("fieldCount = %u\n", fieldCount);
+				//printf("numFields = %u\n\n", numFields);
+				if((fieldCount != 0) && (fieldCount == numFields - 1)) {
+					// Print out value
+					fprintf((tposeQuery->outputFile)->fd, "%s%c", fieldTempString, fieldDelimiter);
+					fflush((tposeQuery->outputFile)->fd); // Ensure output is printed
+				}
 					
 				// Reset flags for next row
 				fieldCount = 0;
@@ -826,10 +830,10 @@ void tposeIOTransposeSimple(
 				continue;
 			}
 			
-			// Track current group field
+			// Track current field
 			if((totalCharCount != (tposeQuery->inputFile)->fileSize) && (fieldCount == currentField))  { // if group value is empty string we ignore
 
-				// Get group field value
+				// Get current field value
 				while((*fieldSavePtr != fieldDelimiter) && (*fieldSavePtr != rowDelimiter)) {
 					fieldTempString[fieldCharCount++] = *fieldSavePtr++;
 					++totalCharCount;
