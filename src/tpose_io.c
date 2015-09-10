@@ -814,8 +814,6 @@ void tposeIOTransposeSimple(
 			}
 
 			if(*fieldSavePtr == rowDelimiter) {
-				//printf("fieldCount = %u\n", fieldCount);
-				//printf("numFields = %u\n\n", numFields);
 				if((fieldCount != 0) && (fieldCount == numFields - 1)) {
 					// Print out value
 					fprintf((tposeQuery->outputFile)->fd, "%s%c", fieldTempString, fieldDelimiter);
