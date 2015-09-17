@@ -71,7 +71,7 @@
 		int fd;
 		char* fileAddr;
 		char* dataAddr;
-		unsigned long long fileSize;
+		off_t fileSize;
 		unsigned char fieldDelimiter;
 		TposeHeader* fileHeader;
 	} TposeInputFile;
@@ -93,9 +93,9 @@
 		TposeInputFile* inputFile;
 		TposeOutputFile* outputFile;
 		TposeAggregator* aggregator;
-		int id;
-		int group;
-		int numeric;
+		unsigned int id;
+		unsigned int group;
+		unsigned int numeric;
 	} TposeQuery;
 
 
@@ -103,7 +103,7 @@
 	TposeInputFile* tposeIOOpenInputFile(char* filePath, unsigned char fieldDelimiter, unsigned int mutateHeader);
 	int tposeIOCloseInputFile(TposeInputFile* inputFile);
 
-	TposeInputFile* tposeIOInputFileAlloc(int fd, char* fileAddr, size_t fileSize, unsigned char fieldDelimiter);
+	TposeInputFile* tposeIOInputFileAlloc(int fd, char* fileAddr, off_t fileSize, unsigned char fieldDelimiter);
 	void tposeIOInputFileFree(TposeInputFile** intputFilePtr);
 
 	TposeHeader* tposeIOReadInputHeader(TposeInputFile* inputFile, unsigned int mutateHeader);
