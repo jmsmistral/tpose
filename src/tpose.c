@@ -28,7 +28,6 @@ static const char* shortopts = "d:ip:s:a:hv";
 static const struct option longopts[] = {
 	{"delimiter", required_argument, NULL, 'd'}
 	,{"indexed", no_argument, NULL, 'i'}
-	//,{"unbuffered", no_argument, NULL, 'u'}
 	,{"prefix", required_argument, NULL, 'p'}
 	,{"suffix", required_argument, NULL, 's'}
 	,{"aggregate", required_argument, NULL, 'a'}
@@ -58,7 +57,6 @@ int main(
 
 	int delimiterFlag = 0;
 	int indexedFlag = 0;
-	//int unbufferedFlag = 0;
 	int prefixFlag = 0;
 	int suffixFlag = 0;
 	int aggregateFlag = 0;
@@ -100,9 +98,6 @@ int main(
 			case 'i':
 				indexedFlag = 1;
 				break;
-			/*case 'u':
-				unbufferedFlag = 1;
-				break;*/
 			case 'p':
 				prefixFlag = 1;
 				prefixArg = optarg;
