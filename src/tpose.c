@@ -250,7 +250,7 @@ int main(
 		mutateHeader = 0; // Don't need to read header for simple transpose
 	
 
-	/* Core */
+	// Core
 	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
 	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
 
@@ -282,7 +282,6 @@ int main(
 		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOgetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroup(tposeQuery, btree);
-		tposeIOPrintOutput(tposeQuery);
 		btreeFree(&btree);
 	}
 	

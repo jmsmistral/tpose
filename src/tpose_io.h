@@ -20,6 +20,7 @@
 #define _TPOSE_IO_H_
 
 	#include <fcntl.h>
+	#include <unistd.h>
 	#include <sys/mman.h>
 	#include <sys/stat.h>
 	#include <ctype.h>
@@ -36,6 +37,10 @@
 	#define TPOSE_IO_MAX_FIELD_WIDTH 5000
 	
 	#define TPOSE_IO_HASH_MULT 37
+
+	#define TPOSE_IO_CHUNK_SIZE 1073741824
+
+	#define _FILE_OFFSET_BITS 64 // Enable long file access
 
 	extern unsigned char rowDelimiter;
 
@@ -66,7 +71,7 @@
 		int fd;
 		char* fileAddr;
 		char* dataAddr;
-		size_t fileSize;
+		unsigned long long fileSize;
 		unsigned char fieldDelimiter;
 		TposeHeader* fileHeader;
 	} TposeInputFile;
