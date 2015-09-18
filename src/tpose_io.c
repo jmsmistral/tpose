@@ -701,6 +701,22 @@ void tposeIOParallelize(
 	for(t=chunks; t>=0; t--)
 		partitions[i++] = prepartitions[t];
 
+	// Print partitions
+	for(i=0; i<=chunks; i++) {
+		printf("partitions[%u] = %u\n", i, partitions[i]);
+	}
+
+	// Correct partitions to start on new lines
+	char* partSavePtr;
+	off_t offset;
+	for(t=1; t<chunks; t++) { // Don't need to modify first partition (0)
+		partSavePtr = fieldSavePtr + partitions[t];
+		while(*(partSavePtr++) != '\n') offset++;
+		partSavePtr++;
+		partitions[t] += offset;
+	}
+
+	// Print updated partitions
 	for(i=0; i<=chunks; i++) {
 		printf("partitions[%u] = %u\n", i, partitions[i]);
 	}
@@ -713,6 +729,8 @@ void tposeIOParallelize(
 		return NULL;
 	}
 
+
+	// Create threads
 	unsigned int mutateHeader = 1; // Allow for header row to be modified
 	pthread_t threads[chunks]; // Thread array
 	int *taskids[chunks]; // Array of thread Id's
@@ -778,10 +796,11 @@ void* PrintHello(
 	printf("**Thread %u reporting!\n", taskId);
 
 	//sleep(1);
-	printf("**Thread %u: fileDelimiter='%c'\n", taskId, fieldDelimiter);
+	//printf("**Thread %u: fileDelimiter='%c'\n", taskId, fieldDelimiter);
 	printf("**Thread %u: partition start = %u, end = %u\n", taskId, partitions[taskId], partitions[taskId+1]);
 	off_t partitionStart = partitions[taskId];
 	off_t partitionEnd = partitions[taskId+1];
+	off_t partitionCharLimit = partitionEnd - partitionStart;
 
 	BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 	BTreeKey* key = btreeKeyAlloc();
@@ -798,19 +817,24 @@ void* PrintHello(
 	off_t hashCharCount = 0; 
 	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
 	off_t hashValue = 0; 
-	off_t fileSize = (tposeQuery->inputFile)->fileSize; 
-	off_t rFileSize = fileSize; // Remaining file size
-	unsigned int chunks = 1; // Number of file chunks
+	//off_t fileSize = (tposeQuery->inputFile)->fileSize; 
+	//off_t rFileSize = fileSize; // Remaining file size
+	//unsigned int chunks = 1; // Number of file chunks
 
+	printf("%d : dataAddr = %p\n", taskId, ((tposeQuery->inputFile)->dataAddr));
+	printf("%d : dataAddr + %u = %p\n", taskId, partitionStart, ((tposeQuery->inputFile)->dataAddr) + partitionStart);
+	printf("%d : partitionCharLimit = %u\n", taskId, partitionCharLimit);
+
+	
 	fieldSavePtr = ((tposeQuery->inputFile)->dataAddr) + partitionStart; // Init with ptr to second row (where data starts)
 
-		while(totalCharCount <= partitionEnd) {
+		while(totalCharCount <= partitionCharLimit) {
 
 			// FIELD DELIMITER
 			if(*fieldSavePtr == fieldDelimiter) {
 				++fieldCount;
 				++fieldSavePtr;
-				if(++totalCharCount == partitionEnd) break;
+				if(++totalCharCount == partitionCharLimit) break;
 				continue;
 			}
 
@@ -819,7 +843,7 @@ void* PrintHello(
 				fieldCount = 0;
 				++rowCount;
 				++fieldSavePtr;
-				if(++totalCharCount == partitionEnd) break;
+				if(++totalCharCount == partitionCharLimit) break;
 				continue;
 			}
 			
@@ -829,7 +853,7 @@ void* PrintHello(
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
 					tempString[groupCharCount++] = *fieldSavePtr++;
-					if(++totalCharCount == fileSize) break;
+					if(++totalCharCount == partitionCharLimit) break;
 				}
 				tempString[groupCharCount] = '\0'; // Null-terminate string
 
@@ -843,6 +867,8 @@ void* PrintHello(
 					// Check for collisions - print only when we add a unique group
 					debug_print("tposeIOgetUniqueGroups(): New group value found = '");
 					debug_print("tposeIOgetUniqueGroups(): row %u = %s\t%ld\t%u\n", rowCount, tempString, hashValue, uniqueGroupCount);
+
+					printf("%d : New group found! row %u = %s\t%ld\t%u\n", taskId, rowCount, tempString, hashValue, uniqueGroupCount);
 
 					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
 					if(btreeInsert(btree, key) == -1) {
@@ -873,10 +899,11 @@ void* PrintHello(
 
 			// If not a delimiter or group field, then ++
 			++fieldSavePtr;
-			if(++totalCharCount == partitionEnd) break;
+			if(++totalCharCount == partitionCharLimit) break;
 
 		}
 
+		printf("%d : finished!\n", taskId);
 		btreeFree(&btree);
 	
 }
