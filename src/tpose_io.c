@@ -91,7 +91,7 @@ int tposeIOGetFieldIndex(
 TposeInputFile* tposeIOInputFileAlloc(
 	int fd
 	,char* fileAddr
-	,size_t fileSize
+	,off_t fileSize
 	,unsigned char fieldDelimiter
 ) {
 
