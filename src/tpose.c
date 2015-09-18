@@ -274,24 +274,30 @@ int main(
 
 	// Transpose Group
 	if(groupFlag && numericFlag && !idFlag) {
-		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
-		tposeIOgetUniqueGroups(tposeQuery, btree);
-		tposeIOTransposeGroup(tposeQuery, btree);
-		btreeFree(&btree);
+		//BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+		printf("main(): fieldDelimiter = '%c'\n", (tposeQuery->inputFile)->fieldDelimiter);
+		tposeIOParallelize(tposeQuery);
+		printf("D4\n");
+		//tposeIOGetUniqueGroups(tposeQuery, btree);
+		//tposeIOTransposeGroup(tposeQuery, btree);
+		//btreeFree(&btree);
 	}
 	
 	// Transpose Group Id
 	if(groupFlag && numericFlag && idFlag) {
 		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
-		tposeIOgetUniqueGroups(tposeQuery, btree);
+		tposeIOGetUniqueGroups(tposeQuery, btree);
 		tposeIOTransposeGroupId(tposeQuery, btree);
 		btreeFree(&btree);
 	}
 	
 	//Clean-up
 	tposeIOCloseInputFile(inputFile);
+	printf("D5\n");
 	tposeIOCloseOutputFile(outputFile);
+	printf("D6\n");
 	tposeIOQueryFree(&tposeQuery);
+	printf("D7\n");
 	
 	exit(EXIT_SUCCESS);
 }

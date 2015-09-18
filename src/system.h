@@ -32,6 +32,7 @@
    provided by gnulib.  */
 #include <getopt.h>
 #include <unistd.h>
+#include <pthread.h>
 
 /* Unicode */
 /*#include <wchar.h>

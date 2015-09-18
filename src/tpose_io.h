@@ -39,10 +39,12 @@
 	#define TPOSE_IO_HASH_MULT 37
 
 	#define TPOSE_IO_CHUNK_SIZE 1073741824
+	#define TPOSE_IO_THREADS 2
 
 	#define _FILE_OFFSET_BITS 64 // Enable long file access
 
 	extern unsigned char rowDelimiter;
+
 
 
 	/**
@@ -132,7 +134,7 @@
 	/* Util */
 	void tposeIOTransposeSimple(TposeQuery* tposeQuery);
 
-	void tposeIOgetUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
+	void tposeIOGetUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOTransposeGroup(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOPrintOutput(TposeQuery* tposeQuery);
 
@@ -141,6 +143,25 @@
 	void tposeIOPrintGroupIdData(char* id, TposeQuery* tposeQuery);
 	int tposeIOGetFieldIndex(TposeHeader* tposeHeader, char* field); 
 	char* tposeIOLowerCase(char* string);
+
+
+
+/* parallel test start */
+	typedef struct {
+		unsigned int threadId;
+		TposeQuery* query;
+		TposeHeader* header;
+	} TposeThreadData;
+
+	TposeThreadData** threadDataArray;
+	TposeThreadData* threadData;
+
+	off_t partitions[1000];
+
+	void* PrintHello(void* threadArg);
+	void tposeIOParallelize(TposeQuery* tposeQuery);
+/* parallel test end */
+
 
 
 #endif /* TPOSE_IO_H */

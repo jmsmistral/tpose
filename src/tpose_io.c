@@ -665,10 +665,227 @@ TposeHeader* tposeIOReadInputHeader(
 
 
 
+void tposeIOParallelize(
+	TposeQuery* tposeQuery
+) {
+
+	/*if((*tposeHeaderPtr)->fields != NULL) {
+		for(field = 0; field < (*tposeHeaderPtr)->maxFields; field++) {
+			free((*tposeHeaderPtr)->fields[field]);
+		} 
+
+		free((*tposeHeaderPtr)->fields);
+		(*tposeHeaderPtr)->fields = NULL;
+	}*/
+
+	char* fieldSavePtr; // Points at start of each field after every loop
+	off_t fileSize = (tposeQuery->inputFile)->fileSize;
+	off_t rFileSize = fileSize; // Remaining file size
+	unsigned int chunks = 1; // Number of file chunks
+
+	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
+
+	// Calculate file chunks
+	off_t prepartitions[1000];
+	//off_t partitions[1000];
+	int t=0, i=0, j=0;
+	prepartitions[0] = fileSize;
+	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
+		//++chunks;
+		rFileSize -= TPOSE_IO_CHUNK_SIZE;
+		prepartitions[chunks++] = rFileSize;
+	}
+	prepartitions[chunks] = 0;
+	
+	// Reverse partitions to ease processing
+	for(t=chunks; t>=0; t--)
+		partitions[i++] = prepartitions[t];
+
+	for(i=0; i<=chunks; i++) {
+		printf("partitions[%u] = %u\n", i, partitions[i]);
+	}
+
+	printf("parallelize(): chunks = %d\n", chunks);
+
+	// Allocate memory for threadDataArray (one for each file chunk)
+	if((threadDataArray = (TposeThreadData**) calloc(1, chunks * sizeof(TposeThreadData*))) == NULL ) {
+		printf("tposeIOParallelize(): calloc error\n");
+		return NULL;
+	}
+
+	unsigned int mutateHeader = 1; // Allow for header row to be modified
+	pthread_t threads[chunks]; // Thread array
+	int *taskids[chunks]; // Array of thread Id's
+	int rc;
+
+	printf("D1\n");
+	for(t=0; t<chunks; t++) {
+
+		if((threadData = (TposeThreadData*) calloc(1, sizeof(TposeThreadData*))) == NULL ) {
+			printf("tposeIOParallelize(): calloc error2\n");
+			return NULL;
+		}
+		
+		// Assign arguments to current thread
+		threadData->threadId = t;
+		threadData->query = tposeQuery; 
+		threadData->header = (TposeHeader*) tposeIOHeaderAlloc(TPOSE_IO_MAX_FIELDS, mutateHeader); // Allocate the needed memory
+		
+
+		threadDataArray[t] = threadData; 
+
+		/*printf("1 Field Delimiter = '%c'\n", (tposeQuery->inputFile)->fieldDelimiter);
+		printf("1 threadId = %u\n", t);
+		
+		printf("2 threadId = %u\n", threadData->threadId);
+		printf("2 Field Delimiter = '%c'\n", ((threadData->query)->inputFile)->fieldDelimiter);
+		printf("2 Header num fields = %u\n", (threadData->header)->numFields);
+
+		printf("3 threadId = %u\n", threadDataArray[t]->threadId);
+		printf("3 Field Delimiter = '%c'\n", ((threadDataArray[t]->query)->inputFile)->fieldDelimiter);
+		
+		printf("\n");*/
+
+		printf("Creating thread %d\n", t);
+		rc = pthread_create(&threads[t], NULL, PrintHello, (void *) threadDataArray[t]);
+		if (rc) {
+			printf("PARALLEL ERROR; return code from pthread_create() is %d\n", rc);
+			exit(-1);
+		}
+	}
+	printf("D2\n");
+	
+	for(t=0;t<chunks;t++)
+		(void) pthread_join(threads[t], NULL);
+
+	//test print
+	/*for(t=0;t<TPOSE_IO_THREADS;t++)
+		printf("Thread %d changed sum to: sum=%d\n", t, threadDataArray[t].sum);
+	*/
+	printf("D3\n");
+}
+
+
+void* PrintHello(
+	void* threadArg
+) {
+	
+	TposeThreadData* threadData = (TposeThreadData*) threadArg;
+	TposeQuery* tposeQuery = (TposeQuery*) threadData->query;
+	TposeHeader* header = (TposeHeader*) threadData->header;
+	unsigned int taskId = (unsigned int) threadData->threadId;
+	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
+	printf("**Thread %u reporting!\n", taskId);
+
+	//sleep(1);
+	printf("**Thread %u: fileDelimiter='%c'\n", taskId, fieldDelimiter);
+	printf("**Thread %u: partition start = %u, end = %u\n", taskId, partitions[taskId], partitions[taskId+1]);
+	off_t partitionStart = partitions[taskId];
+	off_t partitionEnd = partitions[taskId+1];
+
+	BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+	BTreeKey* key = btreeKeyAlloc();
+	BTreeKey* resultKey;
+	char tempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char* allocString;
+	char* fieldSavePtr; // Points at start of each field after every loop
+
+	// Counters & limits
+	off_t rowCount = 2; // For debugging only
+	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
+	off_t uniqueGroupCount = 0; // Used to index array of header ptrs
+	off_t groupCharCount = 0; 
+	off_t hashCharCount = 0; 
+	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
+	off_t hashValue = 0; 
+	off_t fileSize = (tposeQuery->inputFile)->fileSize; 
+	off_t rFileSize = fileSize; // Remaining file size
+	unsigned int chunks = 1; // Number of file chunks
+
+	fieldSavePtr = ((tposeQuery->inputFile)->dataAddr) + partitionStart; // Init with ptr to second row (where data starts)
+
+		while(totalCharCount <= partitionEnd) {
+
+			// FIELD DELIMITER
+			if(*fieldSavePtr == fieldDelimiter) {
+				++fieldCount;
+				++fieldSavePtr;
+				if(++totalCharCount == partitionEnd) break;
+				continue;
+			}
+
+			// ROW DELIMITER
+			if(*fieldSavePtr == rowDelimiter) {
+				fieldCount = 0;
+				++rowCount;
+				++fieldSavePtr;
+				if(++totalCharCount == partitionEnd) break;
+				continue;
+			}
+			
+			// GROUP FIELD
+			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
+
+				// Copy field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tempString[groupCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == fileSize) break;
+				}
+				tempString[groupCharCount] = '\0'; // Null-terminate string
+
+				// Convert char array to hash
+				for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
+					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
+
+				// Insert into btree
+				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) == NULL) {
+
+					// Check for collisions - print only when we add a unique group
+					debug_print("tposeIOgetUniqueGroups(): New group value found = '");
+					debug_print("tposeIOgetUniqueGroups(): row %u = %s\t%ld\t%u\n", rowCount, tempString, hashValue, uniqueGroupCount);
+
+					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
+					if(btreeInsert(btree, key) == -1) {
+						printf("tposeIOgetUniqueGroups(): btreeInsert error\n");
+					}
+
+					// Insert into TposeHeader object
+					allocString = malloc(strlen(tempString) * sizeof(char));
+					strcpy(allocString, tempString);
+					*(header->fields+(uniqueGroupCount++)) = allocString;
+					header->numFields = uniqueGroupCount; // Update number of fields in header
+				}
+
+				// Reset variables (
+				groupCharCount = 0;
+				hashValue = 0;
+				
+				if(*fieldSavePtr == fieldDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+
+			// If not a delimiter or group field, then ++
+			++fieldSavePtr;
+			if(++totalCharCount == partitionEnd) break;
+
+		}
+
+		btreeFree(&btree);
+	
+}
+
+
 /** 
  ** Returns a unique list of GROUP variable values 
  **/
-void tposeIOgetUniqueGroups(
+void tposeIOGetUniqueGroups(
 	TposeQuery* tposeQuery
 	,BTree* btree
 ) {
