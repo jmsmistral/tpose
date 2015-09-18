@@ -765,7 +765,7 @@ void tposeIOParallelize(
 		printf("\n");*/
 
 		printf("Creating thread %d\n", t);
-		rc = pthread_create(&threads[t], NULL, PrintHello, (void *) threadDataArray[t]);
+		rc = pthread_create(&threads[t], NULL, tposeIOGetUniqueGroupsParallel, (void *) threadDataArray[t]);
 		if (rc) {
 			printf("PARALLEL ERROR; return code from pthread_create() is %d\n", rc);
 			exit(-1);
@@ -784,22 +784,22 @@ void tposeIOParallelize(
 }
 
 
-void* PrintHello(
+void* tposeIOGetUniqueGroupsParallel(
 	void* threadArg
 ) {
 	
 	TposeThreadData* threadData = (TposeThreadData*) threadArg;
 	TposeQuery* tposeQuery = (TposeQuery*) threadData->query;
 	TposeHeader* header = (TposeHeader*) threadData->header;
-	unsigned int taskId = (unsigned int) threadData->threadId;
+	unsigned int threadId = (unsigned int) threadData->threadId;
 	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
-	printf("**Thread %u reporting!\n", taskId);
+	printf("**Thread %u reporting!\n", threadId);
 
 	//sleep(1);
-	//printf("**Thread %u: fileDelimiter='%c'\n", taskId, fieldDelimiter);
-	printf("**Thread %u: partition start = %u, end = %u\n", taskId, partitions[taskId], partitions[taskId+1]);
-	off_t partitionStart = partitions[taskId];
-	off_t partitionEnd = partitions[taskId+1];
+	//printf("**Thread %u: fileDelimiter='%c'\n", threadId, fieldDelimiter);
+	printf("**Thread %u: partition start = %u, end = %u\n", threadId, partitions[threadId], partitions[threadId+1]);
+	off_t partitionStart = partitions[threadId];
+	off_t partitionEnd = partitions[threadId+1];
 	off_t partitionCharLimit = partitionEnd - partitionStart;
 
 	BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
@@ -821,9 +821,9 @@ void* PrintHello(
 	//off_t rFileSize = fileSize; // Remaining file size
 	//unsigned int chunks = 1; // Number of file chunks
 
-	printf("%d : dataAddr = %p\n", taskId, ((tposeQuery->inputFile)->dataAddr));
-	printf("%d : dataAddr + %u = %p\n", taskId, partitionStart, ((tposeQuery->inputFile)->dataAddr) + partitionStart);
-	printf("%d : partitionCharLimit = %u\n", taskId, partitionCharLimit);
+	printf("%d : dataAddr = %p\n", threadId, ((tposeQuery->inputFile)->dataAddr));
+	printf("%d : dataAddr + %u = %p\n", threadId, partitionStart, ((tposeQuery->inputFile)->dataAddr) + partitionStart);
+	printf("%d : partitionCharLimit = %u\n", threadId, partitionCharLimit);
 
 	
 	fieldSavePtr = ((tposeQuery->inputFile)->dataAddr) + partitionStart; // Init with ptr to second row (where data starts)
@@ -868,7 +868,7 @@ void* PrintHello(
 					debug_print("tposeIOgetUniqueGroups(): New group value found = '");
 					debug_print("tposeIOgetUniqueGroups(): row %u = %s\t%ld\t%u\n", rowCount, tempString, hashValue, uniqueGroupCount);
 
-					printf("%d : New group found! row %u = %s\t%ld\t%u\n", taskId, rowCount, tempString, hashValue, uniqueGroupCount);
+					printf("%d : New group found! row %u = %s\t%ld\t%u\n", threadId, rowCount, tempString, hashValue, uniqueGroupCount);
 
 					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
 					if(btreeInsert(btree, key) == -1) {
@@ -903,7 +903,7 @@ void* PrintHello(
 
 		}
 
-		printf("%d : finished!\n", taskId);
+		printf("%d : finished!\n", threadId);
 		btreeFree(&btree);
 	
 }

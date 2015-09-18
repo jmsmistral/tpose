@@ -158,8 +158,8 @@
 
 	off_t partitions[1000];
 
-	void* PrintHello(void* threadArg);
 	void tposeIOParallelize(TposeQuery* tposeQuery);
+	void* tposeIOGetUniqueGroupsParallel(void* threadArg);
 /* parallel test end */
 
 
