@@ -706,15 +706,47 @@ void tposeIOParallelize(
 		printf("partitions[%u] = %u\n", i, partitions[i]);
 	}
 
-	// Correct partitions to start on new lines
+	// Correct partitions to start after new lines
 	char* partSavePtr;
 	off_t offset;
 	for(t=1; t<chunks; t++) { // Don't need to modify first partition (0)
+		offset = 0;
 		partSavePtr = fieldSavePtr + partitions[t];
-		while(*(partSavePtr++) != '\n') offset++;
-		partSavePtr++;
+		while(*(partSavePtr++) != '\n') {
+			++offset;
+		}
+		++offset;
+		while(*(partSavePtr) != '\t') {
+			printf("%c", *partSavePtr);
+			++partSavePtr;
+		}
+		++partSavePtr;
+		printf("\t");
+		while(*(partSavePtr) != '\t') {
+			printf("%c", *partSavePtr);
+			++partSavePtr;
+		}
+		printf("\n");
 		partitions[t] += offset;
 	}
+
+	// test new partitions
+	for(t=1; t<chunks; t++) { // Don't need to modify first partition (0)
+		printf("Thread: %d\t", t);
+		partSavePtr = fieldSavePtr + partitions[t];
+		while(*(partSavePtr) != '\t') {
+			printf("%c", *partSavePtr);
+			++partSavePtr;
+		}
+		++partSavePtr;
+		printf("\t");
+		while(*(partSavePtr) != '\t') {
+			printf("%c", *partSavePtr);
+			++partSavePtr;
+		}
+		printf("\n");
+	}
+	
 
 	// Print updated partitions
 	for(i=0; i<=chunks; i++) {
@@ -793,7 +825,7 @@ void* tposeIOGetUniqueGroupsParallel(
 	TposeHeader* header = (TposeHeader*) threadData->header;
 	unsigned int threadId = (unsigned int) threadData->threadId;
 	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
-	printf("**Thread %u reporting!\n", threadId);
+	printf("%u : Reporting for duty!\n", threadId);
 
 	//sleep(1);
 	//printf("**Thread %u: fileDelimiter='%c'\n", threadId, fieldDelimiter);
@@ -866,9 +898,9 @@ void* tposeIOGetUniqueGroupsParallel(
 
 					// Check for collisions - print only when we add a unique group
 					debug_print("tposeIOgetUniqueGroups(): New group value found = '");
-					debug_print("tposeIOgetUniqueGroups(): row %u = %s\t%ld\t%u\n", rowCount, tempString, hashValue, uniqueGroupCount);
+					debug_print("tposeIOgetUniqueGroups(): row=%u / field=%u = %s\thash=%ld\tuniqueGroupCount=%u\n", rowCount, fieldCount, tempString, hashValue, uniqueGroupCount);
 
-					printf("%d : New group found! row %u = %s\t%ld\t%u\n", threadId, rowCount, tempString, hashValue, uniqueGroupCount);
+					printf("%d : New group! row=%u / field=%u = %s\thash=%ld\tuniqueGroupCount=%u\n", threadId, rowCount, fieldCount, tempString, hashValue, uniqueGroupCount);
 
 					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
 					if(btreeInsert(btree, key) == -1) {
