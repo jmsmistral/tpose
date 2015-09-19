@@ -134,7 +134,7 @@
 	/* Util */
 	void tposeIOTransposeSimple(TposeQuery* tposeQuery);
 
-	void tposeIOGetUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
+	void tposeIOUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOTransposeGroup(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOPrintOutput(TposeQuery* tposeQuery);
 
@@ -143,7 +143,6 @@
 	void tposeIOPrintGroupIdData(char* id, TposeQuery* tposeQuery);
 	int tposeIOGetFieldIndex(TposeHeader* tposeHeader, char* field); 
 	char* tposeIOLowerCase(char* string);
-
 
 
 /* parallel test start */
@@ -156,10 +155,14 @@
 	TposeThreadData** threadDataArray;
 	TposeThreadData* threadData;
 
+	unsigned int fileChunks; // Number of file chunks
 	off_t partitions[1000];
 
-	void tposeIOParallelize(TposeQuery* tposeQuery);
-	void* tposeIOGetUniqueGroupsParallel(void* threadArg);
+
+	void tposeIOBuildPartitions(TposeQuery* tposeQuery);
+	void tposeIOUniqueGroupsParallel(TposeQuery* tposeQuery);
+	void* tposeIOUniqueGroupsMap(void* threadArg);
+	void tposeIOUniqueGroupsReduce(TposeQuery* tposeQuery);
 /* parallel test end */
 
 
