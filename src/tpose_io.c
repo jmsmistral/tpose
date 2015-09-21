@@ -675,6 +675,8 @@ void tposeIOBuildPartitions(
 	off_t fileSize = (tposeQuery->inputFile)->fileSize;
 	off_t rFileSize = fileSize; // Remaining file size
 
+	if(fileSize != 0)
+		fileChunks = 1; // At least one file chunk
 	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
 
 	// Calculate file chunks
@@ -705,7 +707,7 @@ void tposeIOBuildPartitions(
 	}
 
 	// Test new partitions TODO: Remove
-	for(t=1; t<fileChunks; t++) { // Don't need to modify first partition (0)
+	/*for(t=1; t<fileChunks; t++) { // Don't need to modify first partition (0)
 		printf("Thread: %d\t", t);
 		partSavePtr = fieldSavePtr + partitions[t];
 		while(*(partSavePtr) != '\t') {
@@ -719,14 +721,15 @@ void tposeIOBuildPartitions(
 			++partSavePtr;
 		}
 		printf("\n");
-	}
-	
-	// Print updated partitions
-	/*for(i=0; i<=fileChunks; i++) {
-		printf("partitions[%u] = %u\n", i, partitions[i]);
 	}*/
+	
+	printf("tposeIOUniqueGroupsParallel(): Chunks = %d\n", fileChunks);
 
-	printf("Parallelize(): Chunks = %d\n", fileChunks);
+	// Print updated partitions
+	for(i=0; i<=fileChunks; i++) {
+		printf("partitions[%u] = %u\n", i, partitions[i]);
+	}
+
 
 }
 
@@ -784,87 +787,6 @@ void tposeIOUniqueGroupsParallel(
 		free(threadDataArray[t]);
 	}
 	free(threadDataArray);
-
-}
-
-
-
-void tposeIOUniqueGroupsReduce(
-	TposeQuery* tposeQuery
-) {
-	
-	// Counters & limits
-	unsigned int mutateHeader = 1; // Allow for header row to be modified
-	off_t uniqueGroupCount = 0; // Used to index array of header ptrs
-	off_t groupCharCount = 0; 
-	off_t hashCharCount = 0; 
-	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashValue = 0; 
-
-	// Temp allocs
-	BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
-	BTreeKey* key = btreeKeyAlloc();
-	BTreeKey* resultKey;
-	char tempString[TPOSE_IO_MAX_FIELD_WIDTH];
-	char* allocString;
-	char* charSavePtr; // Points at start of each field after every loop
-
-	// Reduced output header
-	TposeHeader* header = tposeIOHeaderAlloc(TPOSE_IO_MAX_FIELDS, mutateHeader); // Allocate the needed memory*/
-
-	// Reduce parallel headers to single output header
-	int threadCtr, fieldCtr;
-	for(threadCtr = 0; threadCtr < fileChunks; threadCtr++) {
-		for(fieldCtr = 0; fieldCtr < (threadDataArray[threadCtr]->header)->numFields; fieldCtr++) {
-
-				//printf("%d : field[%d] = %s\n", threadCtr, fieldCtr, (threadDataArray[threadCtr]->header)->fields[fieldCtr]);
-
-				charSavePtr = (threadDataArray[threadCtr]->header)->fields[fieldCtr];
-				
-				// Copy field value
-				while(*charSavePtr != '\0') {
-					tempString[groupCharCount++] = *charSavePtr++;
-				}
-				tempString[groupCharCount] = '\0'; // Null-terminate string
-				//printf("%d : tempString = %s\n", threadCtr, tempString);
-
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
-
-				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) == NULL) {
-
-					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
-					if(btreeInsert(btree, key) == -1) {
-						printf("tposeIOUniqueGroupsReduce(): btreeInsert error\n");
-					}
-
-					// Insert into TposeHeader object
-					allocString = malloc(strlen(tempString) * sizeof(char));
-					strcpy(allocString, tempString);
-					*(header->fields+(uniqueGroupCount++)) = allocString;
-				}
-
-				// Reset variables (
-				groupCharCount = 0;
-				hashValue = 0;
-		}
-	}
-
-	
-	header->numFields = uniqueGroupCount;
-	//printf("number of unique groups = %u\n", header->numFields);
-
-	/*printf("\n");
-	for(fieldCtr = 0; fieldCtr < header->numFields; fieldCtr++) {
-		printf("unique groups [%u]  = %s\n", fieldCtr, header->fields[fieldCtr]);
-	}*/
-
-	btreeFree(&btree);
-	
-	// Assign groups to output file header 
-	(tposeQuery->outputFile)->fileGroupHeader = header; 
 
 }
 
@@ -987,6 +909,338 @@ void* tposeIOUniqueGroupsMap(
 		// Clean-up
 		btreeFree(&btree);
 	
+}
+
+
+
+void tposeIOUniqueGroupsReduce(
+	TposeQuery* tposeQuery
+) {
+	
+	// Counters & limits
+	unsigned int mutateHeader = 1; // Allow for header row to be modified
+	off_t uniqueGroupCount = 0; // Used to index array of header ptrs
+	off_t groupCharCount = 0; 
+	off_t hashCharCount = 0; 
+	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
+	off_t hashValue = 0; 
+
+	// Temp allocs
+	//BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+	BTreeKey* key = btreeKeyAlloc();
+	BTreeKey* resultKey;
+	char tempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char* allocString;
+	char* charSavePtr; // Points at start of each field after every loop
+
+	// Reduced output header
+	TposeHeader* header = tposeIOHeaderAlloc(TPOSE_IO_MAX_FIELDS, mutateHeader); // Allocate the needed memory*/
+
+	// Reduce parallel headers to single output header
+	int threadCtr, fieldCtr;
+	for(threadCtr = 0; threadCtr < fileChunks; threadCtr++) {
+		for(fieldCtr = 0; fieldCtr < (threadDataArray[threadCtr]->header)->numFields; fieldCtr++) {
+
+				//printf("%d : field[%d] = %s\n", threadCtr, fieldCtr, (threadDataArray[threadCtr]->header)->fields[fieldCtr]);
+
+				charSavePtr = (threadDataArray[threadCtr]->header)->fields[fieldCtr];
+				
+				// Copy field value
+				while(*charSavePtr != '\0') {
+					tempString[groupCharCount++] = *charSavePtr++;
+				}
+				tempString[groupCharCount] = '\0'; // Null-terminate string
+				//printf("%d : tempString = %s\n", threadCtr, tempString);
+
+				// Convert char array to hash
+				for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
+					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
+
+				// Insert into btree
+				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, hashValue)) == NULL) {
+
+					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
+					if(btreeInsert(btreeGlobal, key) == -1) {
+						printf("tposeIOUniqueGroupsReduce(): btreeInsert error\n");
+					}
+
+					// Insert into TposeHeader object
+					allocString = malloc(strlen(tempString) * sizeof(char));
+					strcpy(allocString, tempString);
+					*(header->fields+(uniqueGroupCount++)) = allocString;
+				}
+
+				// Reset variables (
+				groupCharCount = 0;
+				hashValue = 0;
+		}
+	}
+
+	
+	header->numFields = uniqueGroupCount;
+	//printf("number of unique groups = %u\n", header->numFields);
+
+	printf("\n");
+	for(fieldCtr = 0; fieldCtr < header->numFields; fieldCtr++) {
+		printf("unique groups [%u]  = %s\n", fieldCtr, header->fields[fieldCtr]);
+	}
+
+//	btreeFree(&btree);
+	
+	// Assign groups to output file header 
+	(tposeQuery->outputFile)->fileGroupHeader = header; 
+
+}
+
+
+
+void tposeIOTransposeGroupParallel(
+	TposeQuery* tposeQuery
+) {
+
+	extern unsigned int fileChunks; // Number of file chunks
+	printf("tposeIOTransposeGroupParallel() : Chunks = %u\n", fileChunks);
+
+			/*printf("START : id = %u\n", tposeQuery->id);
+			printf("START : group = %u \n", tposeQuery->group);
+			printf("START : numeric = %u \n", tposeQuery->numeric);*/
+
+	unsigned int mutateHeader = 1; // Allow for header row to be modified
+	pthread_t threads[fileChunks]; // Thread array
+	int *taskids[fileChunks]; // Array of thread Id's
+	int rc;
+	int t=0, i=0, j=0;
+
+	// Allocate memory for threadAggregatorArray (one for each file chunk)
+	if((threadAggregatorArray = (TposeThreadAggregator**) calloc(1, fileChunks * sizeof(TposeThreadAggregator*))) == NULL ) {
+		printf("tposeIOTransposeGroupParallel(): aggregator arrray calloc error\n");
+		return NULL;
+	}
+
+	// Create threads
+	for(t=0; t<fileChunks; t++) {
+
+		if((threadAggregator = (TposeThreadAggregator*) calloc(1, sizeof(TposeThreadAggregator))) == NULL ) {
+			printf("tposeIOTransposeGroupParallel(): aggregator calloc error\n");
+			return NULL;
+		}
+
+		// Assign arguments to current thread
+		threadAggregator->threadId = t;
+		threadAggregator->query = tposeQuery; 
+		threadAggregator->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields);
+		threadAggregatorArray[t] = threadAggregator; 
+
+			/*printf("%u : id = %u\n", t, (threadAggregator->query)->id);
+			printf("%u : group =%u \n", t, (threadAggregator->query)->group);
+			printf("%u : numeric =%u \n", t, (threadAggregator->query)->numeric);*/
+
+		// Map input to threads
+		rc = pthread_create(&threads[t], NULL, tposeIOTransposeGroupMap, (void *) threadAggregatorArray[t]);
+		if (rc) {
+			printf("tposeIOTransposeGroupParallel(): pthread_create error! Return code = %d\n", rc);
+			exit(-1);
+		}
+	}
+	
+	// Sync threads
+	for(t=0; t<fileChunks; t++)
+		(void) pthread_join(threads[t], NULL);
+
+	// Reduce output header
+	tposeIOTransposeGroupReduce(tposeQuery);
+
+	// Clean-up
+	for(t=0; t<fileChunks; t++) {
+		tposeIOAggregatorFree(&(threadAggregatorArray[t]->aggregator));
+	}
+	free(threadAggregatorArray);
+
+}
+
+
+
+void tposeIOTransposeGroupReduce(
+	TposeQuery* tposeQuery
+){
+
+	/*printf("(1) aggregator->numFields = %u\n", (threadAggregatorArray[0]->aggregator)->numFields);
+	printf("(1) fileChunks = %u\n", fileChunks);*/
+	tposeQuery->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields);
+
+	unsigned int threadCtr, fieldCtr;
+	for(threadCtr=0; threadCtr < fileChunks; threadCtr++) {
+		//printf("%u : ", threadCtr);
+		for(fieldCtr=0; fieldCtr < (threadAggregatorArray[threadCtr]->aggregator)->numFields; fieldCtr++) {
+			//printf("(fieldCtr=%u) : %f\t", fieldCtr, (threadAggregatorArray[threadCtr]->aggregator)->aggregates[fieldCtr]);
+			(tposeQuery->aggregator)->aggregates[fieldCtr] += (threadAggregatorArray[threadCtr]->aggregator)->aggregates[fieldCtr];
+		}
+		//printf("\n");
+	}
+
+	/*printf("(2) aggregator->numFields = %u\t", (threadAggregatorArray[0]->aggregator)->numFields);
+	for(fieldCtr=0; fieldCtr<(threadAggregatorArray[0]->aggregator)->numFields; fieldCtr++) {
+		printf("%f\t", (tposeQuery->aggregator)->aggregates[fieldCtr]);
+	}
+	printf("\n");*/
+	
+	tposeIOPrintOutput(tposeQuery);
+
+	// Clean-up
+	tposeIOAggregatorFree(&(tposeQuery->aggregator));
+	
+}
+
+
+
+void* tposeIOTransposeGroupMap(
+	void* threadArg
+) {
+
+	TposeThreadAggregator* threadAggregator = (TposeThreadAggregator*) threadArg;
+
+	TposeQuery* tposeQuery = (TposeQuery*) threadAggregator->query;
+	TposeAggregator* aggregator = (TposeAggregator*) threadAggregator->aggregator;
+	unsigned int threadId = (unsigned int) threadAggregator->threadId;
+	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
+	unsigned int groupFoundFlag = 0; // 1 when we find the group field, 0 otherwise (0 if there is no group value)
+	unsigned int numericFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
+	printf("%u : Reporting for duty!\n", threadId);
+/*	printf("%u : id = %d\n", threadId, tposeQuery->id);
+	printf("%u : group = %d\n", threadId, tposeQuery->group);
+	printf("%u : numeric = %d\n", threadId, tposeQuery->numeric);
+*/
+	off_t partitionStart = partitions[threadId];
+	off_t partitionEnd = partitions[threadId+1];
+	off_t partitionCharLimit = partitionEnd - partitionStart;
+
+	//BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+	BTreeKey* key = btreeKeyAlloc();
+	BTreeKey* resultKey;
+	char* allocString;
+	char* fieldSavePtr; // Points at start of each field after every loop
+	char groupTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char numericTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+
+	// Counters & limits
+	off_t rowCount = 2; // For debugging only
+	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
+	unsigned int fieldCharCount = 0;
+	off_t hashCharCount = 0; 
+	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
+	off_t hashValue = 0; 
+	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
+
+
+	fieldSavePtr = ((tposeQuery->inputFile)->dataAddr) + partitionStart; // Init with ptr to second row (where data starts)
+
+
+		/* Process each file chunk */
+		while(totalCharCount <= partitionCharLimit) {
+
+			// FIELD DELIMITER
+			if(*fieldSavePtr == fieldDelimiter) {
+				++fieldCount;
+				++fieldSavePtr;
+				if(++totalCharCount == partitionCharLimit) break;
+				continue;
+			}
+
+			// ROW DELIMITER
+			if(*fieldSavePtr == rowDelimiter) {
+				// Aggregate value for each group
+				if((groupFoundFlag == 1) && (numericFoundFlag == 1)) {
+					//printf("%s\n", groupTempString);
+					aggregator->aggregates[groupFieldIndex] += atof(numericTempString);
+				}
+					
+				// Reset flags for next row
+				groupFoundFlag = 0;
+				numericFoundFlag = 0;
+
+				fieldCount = 0;
+				++fieldSavePtr;
+				if(++totalCharCount == partitionCharLimit) break;
+				continue;
+
+			}
+
+			// GROUP FIELD
+			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
+
+				// Get group field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					groupTempString[fieldCharCount++] = *fieldSavePtr++;
+					++totalCharCount;
+				}
+				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
+				//printf("groupTempString =  %s\n", groupTempString);
+
+				// Convert char array to hash
+				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
+					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
+				//printf("groupTempString =  %s\n", groupTempString);
+
+				// Insert into btree
+				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, hashValue)) != NULL) {
+					//printf("%d : dataOffset = %u\n", threadId, resultKey->dataOffset);
+					groupFoundFlag = 1; // Flag group field as found
+					groupFieldIndex = resultKey->dataOffset; // TODO: Keep an eye on this for bugs
+				}
+
+				// Reset variables
+				fieldCharCount = 0;
+				hashValue = 0;
+				
+				if(*fieldSavePtr == fieldDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+			
+			// NUMERIC FIELD
+			if(fieldCount == (tposeQuery->numeric))  { // if group value is empty string we ignore
+
+				numericFoundFlag = 1; // Flag numeric field as found
+				
+				// Copy field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					numericTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == partitionCharLimit) break;
+				}
+				numericTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				// Reset vars
+				fieldCharCount = 0;
+
+				if(*fieldSavePtr == fieldDelimiter) {
+					--totalCharCount;
+					--fieldSavePtr;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+
+			// If not a delimiter or group field, then ++
+			++fieldSavePtr;
+			if(++totalCharCount == partitionCharLimit) break;
+
+		}
+
+	debug_print("%d : tposeIOTransposeGroupMap(): tranpose completed!\n", threadId);
+
+	
+	// Clean-up
+//	btreeFree(&btree);
+
 }
 
 
@@ -1389,7 +1643,7 @@ void tposeIOTransposeGroup(
 
 	} /* End for-loop */
 
-	debug_print("tposeIOTransposeGroup(): run tranpose!\n");
+	debug_print("tposeIOTransposeGroup(): tranpose completed!\n");
 
 	tposeIOPrintOutput(tposeQuery);
 

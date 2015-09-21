@@ -95,9 +95,9 @@
 		TposeInputFile* inputFile;
 		TposeOutputFile* outputFile;
 		TposeAggregator* aggregator;
-		unsigned int id;
-		unsigned int group;
-		unsigned int numeric;
+		int id;
+		int group;
+		int numeric;
 	} TposeQuery;
 
 
@@ -146,6 +146,9 @@
 
 
 /* parallel test start */
+
+	BTree* btreeGlobal; // Needs to persist between computing unique groups, and aggregating values
+
 	typedef struct {
 		unsigned int threadId;
 		TposeQuery* query;
@@ -155,14 +158,30 @@
 	TposeThreadData** threadDataArray;
 	TposeThreadData* threadData;
 
+	typedef struct {
+		unsigned int threadId;
+		TposeQuery* query;
+		TposeAggregator* aggregator;
+	} TposeThreadAggregator;
+
+	TposeThreadAggregator** threadAggregatorArray;
+	TposeThreadAggregator* threadAggregator;
+
 	unsigned int fileChunks; // Number of file chunks
 	off_t partitions[1000];
 
 
+	// functions
 	void tposeIOBuildPartitions(TposeQuery* tposeQuery);
+
 	void tposeIOUniqueGroupsParallel(TposeQuery* tposeQuery);
 	void* tposeIOUniqueGroupsMap(void* threadArg);
 	void tposeIOUniqueGroupsReduce(TposeQuery* tposeQuery);
+
+	void tposeIOTransposeGroupParallel(TposeQuery* tposeQuery);
+	void* tposeIOTransposeGroupMap(void* threadArg);
+	void tposeIOTransposeGroupReduce(TposeQuery* tposeQuery);
+
 /* parallel test end */
 
 

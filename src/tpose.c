@@ -274,12 +274,18 @@ int main(
 
 	// Transpose Group
 	if(groupFlag && numericFlag && !idFlag) {
+		// Parallel
+		btreeGlobal = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOBuildPartitions(tposeQuery);
-		//BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
 		tposeIOUniqueGroupsParallel(tposeQuery);
-		//tposeIOGetUniqueGroups(tposeQuery, btree);
-		//tposeIOTransposeGroup(tposeQuery, btree);
-		//btreeFree(&btree);
+		tposeIOTransposeGroupParallel(tposeQuery);
+		btreeFree(&btreeGlobal);
+
+		// Single-threaded
+		/*BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+		tposeIOUniqueGroups(tposeQuery, btree);
+		tposeIOTransposeGroup(tposeQuery, btree);
+		btreeFree(&btree);*/
 	}
 	
 	// Transpose Group Id
