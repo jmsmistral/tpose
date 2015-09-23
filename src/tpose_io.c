@@ -555,12 +555,13 @@ int tposeIOCloseInputFile(
  **/
 TposeOutputFile* tposeIOOpenOutputFile(
 	char* filePath
+	,const char* mode
 	,unsigned char fieldDelimiter
 ) {
 
 	FILE* fd;
 	if(strcmp(filePath, "stdout")) {
-		if((fd = fopen(filePath, "wa" )) == NULL) {
+		if((fd = fopen(filePath, mode)) == NULL) {
 			printf("Error: tposeIOOpenOutputFile - can not open output file %s\n", filePath);
 			return NULL;
 		}
@@ -665,23 +666,28 @@ TposeHeader* tposeIOReadInputHeader(
 
 
 
-void tposeIOBuildPartitions(
+int tposeIOBuildPartitions(
 	TposeQuery* tposeQuery
+	,unsigned int mode
 ) {
 
 	extern unsigned int fileChunks; // Number of file chunks
-
+	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
 	char* fieldSavePtr; // Points at start of each field after every loop
 	off_t fileSize = (tposeQuery->inputFile)->fileSize;
 	off_t rFileSize = fileSize; // Remaining file size
 
+	// Quick check for empty files
 	if(fileSize != 0)
 		fileChunks = 1; // At least one file chunk
+	else
+		return -1;
+
 	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
 
 	// Calculate file chunks
 	off_t prepartitions[1000];
-	int t=0, i=0, j=0;
+	int t=0, i=0;
 	prepartitions[0] = fileSize;
 	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
 		rFileSize -= TPOSE_IO_CHUNK_SIZE;
@@ -693,21 +699,168 @@ void tposeIOBuildPartitions(
 	for(t=fileChunks; t>=0; t--)
 		partitions[i++] = prepartitions[t];
 
+	// print prepartitions
+	printf("pre partitions...\n");
+	for(i=0; i<=fileChunks; i++) {
+		printf("partitions[%u] = %u\n", i, partitions[i]);
+	}
+
 	// Correct partitions to start after new lines
 	char* partSavePtr;
 	off_t offset;
-	for(t=1; t<fileChunks; t++) { // Don't need to modify first partition (0)
-		offset = 0;
-		partSavePtr = fieldSavePtr + partitions[t];
-		while(*(partSavePtr++) != '\n') {
+
+	if(mode == TPOSE_IO_PARTITION_GROUP) {
+
+		for(t=1; t<fileChunks; t++) { // Don't need to modify first partition (0)
+			offset = 0;
+			partSavePtr = fieldSavePtr + partitions[t];
+			while(*(partSavePtr++) != '\n') {
+				++offset;
+			}
 			++offset;
+			partitions[t] += offset;
 		}
-		++offset;
-		partitions[t] += offset;
+
+	}
+	else if(mode == TPOSE_IO_PARTITION_ID) { // Partition file into chunks with mutually excluse set of IDs (avoids post-processing 'shuffle')
+
+		off_t partitionStart;
+		off_t partitionEnd;
+		off_t partitionCharLimit;
+		unsigned int idFoundFlag = 0; 
+		unsigned int fieldCount = 0; 
+		off_t fieldCharCount = 0; 
+		off_t totalCharCount = 0; 
+		char currentId[TPOSE_IO_MAX_FIELD_WIDTH];
+		char tempString[TPOSE_IO_MAX_FIELD_WIDTH];
+		unsigned int iterationCtr = 0;
+
+		for(t=1; t<fileChunks; t++) { // Don't need to modify first partition (0)
+			offset = 0;
+			totalCharCount = 0;
+			idFoundFlag = 0; 
+			iterationCtr = 0;
+
+			// Starting point
+			partSavePtr = fieldSavePtr + partitions[t];
+
+			// Correct to point at start of line
+			while(*(partSavePtr++) != '\n') {
+				++offset;
+			}
+			++offset;
+			partitions[t] += offset;
+			offset = 0;
+
+			// Set partition params
+			partitionStart = partitions[t];
+			partitionEnd = partitions[t+1];
+			partitionCharLimit = partitionEnd - partitionStart;
+			
+			// Corrected starting point
+			partSavePtr = fieldSavePtr + partitions[t];
+
+
+			// Loop over file partition
+			while(!idFoundFlag) {
+
+				// FIELD DELIMITER
+				if(*partSavePtr == fieldDelimiter) {
+					++offset;
+					++fieldCount;
+					++partSavePtr;
+					if(++totalCharCount == partitionCharLimit) break;
+					continue;
+				}
+
+				// ROW DELIMITER
+				if(*partSavePtr == rowDelimiter) {
+					++offset;
+					++partSavePtr;
+					fieldCount = 0;
+					if(++totalCharCount == partitionCharLimit) break;
+					continue;
+				}
+				
+				// ID FIELD
+				if(fieldCount == (tposeQuery->id))  { 
+
+					// Copy field value
+					while(*partSavePtr != fieldDelimiter && *partSavePtr != rowDelimiter) {
+						++offset;
+						tempString[fieldCharCount++] = *partSavePtr++;
+						if(++totalCharCount == partitionCharLimit) break;
+					}
+					tempString[fieldCharCount] = '\0'; // Null-terminate string
+					
+					// Reset variables (
+					fieldCharCount = 0;
+
+					// First iteration only - set first id as current
+					if(iterationCtr == 0) {
+						printf("FUCK YO!\n");
+						strcpy(currentId, tempString); 
+						iterationCtr++;
+					}
+
+					if(!strcmp(currentId, tempString)) {
+						printf("%u : EQUAL... continuing! currentId = %s | tempId = %s\n", t, currentId, tempString);
+						continue;
+					}
+					else {
+						printf("%u : NOT EQUAL... breaking! currentId = %s | tempId = %s\n", t, currentId, tempString);
+						idFoundFlag = 1;
+						strcpy(currentId, tempString); 
+						// Go back to start of current line
+						while(*(partSavePtr--) != '\n') {
+							--offset;
+						}
+						++offset;
+						break;
+					}
+					
+					if(*partSavePtr == fieldDelimiter) {
+						--offset;
+						--partSavePtr;
+						--totalCharCount;
+					}
+
+					if(*partSavePtr == rowDelimiter) {
+						--offset;
+						--partSavePtr;
+						--totalCharCount;
+					}
+
+				}
+
+				// If not a delimiter or group field, then ++
+				++partSavePtr;
+				++offset;
+				if(++totalCharCount == partitionCharLimit) break;
+
+			} // End of while-loop
+
+			// Record new offset
+			partitions[t] += offset;
+		}
+
+	}
+	else {
+		return -1;
+	}
+
+	
+	printf("tposeIOUniqueGroupsParallel(): Chunks = %d\n", fileChunks);
+
+	// Print updated partitions
+	printf("new partitions...\n");
+	for(i=0; i<=fileChunks; i++) {
+		printf("partitions[%u] = %u\n", i, partitions[i]);
 	}
 
 	// Test new partitions TODO: Remove
-	/*for(t=1; t<fileChunks; t++) { // Don't need to modify first partition (0)
+	printf("partitions broken at...\n");
+	for(t=0; t<fileChunks; t++) { // Don't need to modify first partition (0)
 		printf("Thread: %d\t", t);
 		partSavePtr = fieldSavePtr + partitions[t];
 		while(*(partSavePtr) != '\t') {
@@ -721,15 +874,9 @@ void tposeIOBuildPartitions(
 			++partSavePtr;
 		}
 		printf("\n");
-	}*/
-	
-	printf("tposeIOUniqueGroupsParallel(): Chunks = %d\n", fileChunks);
-
-	// Print updated partitions
-	for(i=0; i<=fileChunks; i++) {
-		printf("partitions[%u] = %u\n", i, partitions[i]);
 	}
 
+	return 0;
 
 }
 
@@ -1005,7 +1152,6 @@ void tposeIOTransposeGroupParallel(
 			printf("START : group = %u \n", tposeQuery->group);
 			printf("START : numeric = %u \n", tposeQuery->numeric);*/
 
-	unsigned int mutateHeader = 1; // Allow for header row to be modified
 	pthread_t threads[fileChunks]; // Thread array
 	int *taskids[fileChunks]; // Array of thread Id's
 	int rc;
@@ -1056,39 +1202,6 @@ void tposeIOTransposeGroupParallel(
 	}
 	free(threadAggregatorArray);
 
-}
-
-
-
-void tposeIOTransposeGroupReduce(
-	TposeQuery* tposeQuery
-){
-
-	/*printf("(1) aggregator->numFields = %u\n", (threadAggregatorArray[0]->aggregator)->numFields);
-	printf("(1) fileChunks = %u\n", fileChunks);*/
-	tposeQuery->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields);
-
-	unsigned int threadCtr, fieldCtr;
-	for(threadCtr=0; threadCtr < fileChunks; threadCtr++) {
-		//printf("%u : ", threadCtr);
-		for(fieldCtr=0; fieldCtr < (threadAggregatorArray[threadCtr]->aggregator)->numFields; fieldCtr++) {
-			//printf("(fieldCtr=%u) : %f\t", fieldCtr, (threadAggregatorArray[threadCtr]->aggregator)->aggregates[fieldCtr]);
-			(tposeQuery->aggregator)->aggregates[fieldCtr] += (threadAggregatorArray[threadCtr]->aggregator)->aggregates[fieldCtr];
-		}
-		//printf("\n");
-	}
-
-	/*printf("(2) aggregator->numFields = %u\t", (threadAggregatorArray[0]->aggregator)->numFields);
-	for(fieldCtr=0; fieldCtr<(threadAggregatorArray[0]->aggregator)->numFields; fieldCtr++) {
-		printf("%f\t", (tposeQuery->aggregator)->aggregates[fieldCtr]);
-	}
-	printf("\n");*/
-	
-	tposeIOPrintOutput(tposeQuery);
-
-	// Clean-up
-	tposeIOAggregatorFree(&(tposeQuery->aggregator));
-	
 }
 
 
@@ -1240,6 +1353,347 @@ void* tposeIOTransposeGroupMap(
 	
 	// Clean-up
 //	btreeFree(&btree);
+
+}
+
+
+
+void tposeIOTransposeGroupReduce(
+	TposeQuery* tposeQuery
+){
+
+	/*printf("(1) aggregator->numFields = %u\n", (threadAggregatorArray[0]->aggregator)->numFields);
+	printf("(1) fileChunks = %u\n", fileChunks);*/
+	tposeQuery->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields);
+
+	unsigned int threadCtr, fieldCtr;
+	for(threadCtr=0; threadCtr < fileChunks; threadCtr++) {
+		//printf("%u : ", threadCtr);
+		for(fieldCtr=0; fieldCtr < (threadAggregatorArray[threadCtr]->aggregator)->numFields; fieldCtr++) {
+			//printf("(fieldCtr=%u) : %f\t", fieldCtr, (threadAggregatorArray[threadCtr]->aggregator)->aggregates[fieldCtr]);
+			(tposeQuery->aggregator)->aggregates[fieldCtr] += (threadAggregatorArray[threadCtr]->aggregator)->aggregates[fieldCtr];
+		}
+		//printf("\n");
+	}
+
+	/*printf("(2) aggregator->numFields = %u\t", (threadAggregatorArray[0]->aggregator)->numFields);
+	for(fieldCtr=0; fieldCtr<(threadAggregatorArray[0]->aggregator)->numFields; fieldCtr++) {
+		printf("%f\t", (tposeQuery->aggregator)->aggregates[fieldCtr]);
+	}
+	printf("\n");*/
+	
+	tposeIOPrintOutput(tposeQuery);
+
+	// Clean-up
+	tposeIOAggregatorFree(&(tposeQuery->aggregator));
+	
+}
+
+
+
+void tposeIOTransposeGroupIdParallel(
+	TposeQuery* tposeQuery
+) {
+
+	extern unsigned int fileChunks; // Number of file chunks
+	printf("tposeIOTransposeGroupIdParallel() : Chunks = %u\n", fileChunks);
+
+			/*printf("START : id = %u\n", tposeQuery->id);
+			printf("START : group = %u \n", tposeQuery->group);
+			printf("START : numeric = %u \n", tposeQuery->numeric);*/
+
+	pthread_t threads[fileChunks]; // Thread array
+	int* taskids[fileChunks]; // Array of thread Id's
+	int rc;
+	int t=0, i=0, j=0;
+
+	// Allocate memory for threadAggregatorArray (one for each file chunk)
+	if((threadAggregatorArray = (TposeThreadAggregator**) calloc(1, fileChunks * sizeof(TposeThreadAggregator*))) == NULL ) {
+		printf("tposeIOTransposeGroupIdParallel(): aggregator arrray calloc error\n");
+		//return NULL;
+	}
+
+	// Create threads
+	char tempFilePath[15]; // Array of thread Id's
+
+	for(t=0; t<fileChunks; t++) {
+
+		sprintf(tempFilePath, "temp%u.txt", t);	
+		printf("temp file = %s\n", tempFilePath);
+		if((tempFileArray[t] = tposeIOOpenOutputFile(tempFilePath, "w+",(tposeQuery->inputFile)->fieldDelimiter)) == NULL) {
+			printf("tposeIOTransposeGroupIdParallel(): open output file error\n");
+			//return NULL;
+		}
+
+		if((threadAggregator = (TposeThreadAggregator*) calloc(1, sizeof(TposeThreadAggregator))) == NULL ) {
+			printf("tposeIOTransposeGroupIdParallel(): aggregator calloc error\n");
+			//return NULL;
+		}
+
+		// Assign arguments to current thread
+		threadAggregator->threadId = t;
+		threadAggregator->query = tposeQuery; 
+		threadAggregator->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields);
+		threadAggregatorArray[t] = threadAggregator; 
+
+			/*printf("%u : id = %u\n", t, (threadAggregator->query)->id);
+			printf("%u : group =%u \n", t, (threadAggregator->query)->group);
+			printf("%u : numeric =%u \n", t, (threadAggregator->query)->numeric);*/
+
+		// Map input to threads
+		rc = pthread_create(&threads[t], NULL, tposeIOTransposeGroupIdMap, (void *) threadAggregatorArray[t]);
+		if (rc) {
+			printf("tposeIOTransposeGroupIdParallel(): pthread_create error! Return code = %d\n", rc);
+			exit(-1);
+		}
+	}
+	
+	// Sync threads
+	for(t=0; t<fileChunks; t++)
+		(void) pthread_join(threads[t], NULL);
+
+	
+	// Reduce output header
+	tposeIOTransposeGroupIdReduce(tposeQuery);
+
+	// Clean-up
+	for(t=0; t<fileChunks; t++) {
+		tposeIOAggregatorFree(&(threadAggregatorArray[t]->aggregator));
+		tposeIOCloseOutputFile(tempFileArray[t]);
+	}
+	free(threadAggregatorArray);
+
+}
+
+
+
+void* tposeIOTransposeGroupIdMap(
+	void* threadArg
+) {
+
+	// Flags & static vars
+	TposeThreadAggregator* threadAggregator = (TposeThreadAggregator*) threadArg;
+
+	TposeQuery* tposeQuery = (TposeQuery*) threadAggregator->query;
+	TposeAggregator* aggregator = (TposeAggregator*) threadAggregator->aggregator;
+	unsigned int threadId = (unsigned int) threadAggregator->threadId;
+	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
+
+	unsigned int idFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
+	unsigned int groupFoundFlag = 0; // 1 when we find the group field, 0 otherwise (0 if there is no group value)
+	unsigned int numericFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
+	off_t partitionStart = partitions[threadId];
+	off_t partitionEnd = partitions[threadId+1];
+	off_t partitionCharLimit = partitionEnd - partitionStart;
+
+	printf("%u : Reporting for duty!\n", threadId);
+/*	printf("%u : id = %d\n", threadId, tposeQuery->id);
+	printf("%u : group = %d\n", threadId, tposeQuery->group);
+	printf("%u : numeric = %d\n", threadId, tposeQuery->numeric);*/
+
+	// Temp allocs
+	BTreeKey* key = btreeKeyAlloc();
+	BTreeKey* resultKey;
+	char idCurrentString[TPOSE_IO_MAX_FIELD_WIDTH]; // Holds current id value being aggregated
+	char idTempString[TPOSE_IO_MAX_FIELD_WIDTH]; // Holds id value for each row
+	char groupTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char numericTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char* allocString;
+	char* fieldSavePtr; // Points at start of each field after every loop
+
+	// Counters & limits
+	off_t rowCount = 2; // For debugging only
+	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
+	unsigned int fieldCharCount = 0;
+	unsigned int firstId = 1;
+	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
+	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
+	off_t hashCharCount = 0; 
+	off_t hashValue = 0; 
+
+
+	fieldSavePtr = ((tposeQuery->inputFile)->dataAddr) + partitionStart; // Init with ptr to second row (where data starts)
+
+	if(threadId == 0)
+		tposeIOPrintGroupIdHeaderParallel(tposeQuery, threadId); // Print output header (ONLY TO FIRST TEMP FILE) TODO: Add If for thread 0
+
+
+		/* process each chunk */
+		while(totalCharCount <= partitionCharLimit) {
+
+			// FIELD DELIMITER
+			if(*fieldSavePtr == fieldDelimiter) {
+				++fieldCount;
+				++fieldSavePtr;
+				if(++totalCharCount == partitionCharLimit) break;
+				continue;
+			}
+
+			// ROW DELIMITER
+			if(*fieldSavePtr == rowDelimiter) {
+
+				if((idFoundFlag == 1) && (groupFoundFlag == 1) && (numericFoundFlag == 1)) {
+
+					if(!strcmp(idCurrentString, idTempString)) {
+						// Aggregate value for each group
+						//(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
+						aggregator->aggregates[groupFieldIndex] += atof(numericTempString);
+					}
+					else {
+
+						// 1 Print out current aggregates for id
+						//tposeIOPrintGroupIdData(idCurrentString, tposeQuery);
+						tposeIOPrintGroupIdDataParallel(idCurrentString, tposeQuery, aggregator, threadId);
+						// 2 Set new string as current id
+						strcpy(idCurrentString, idTempString); // Set current id to aggregate values for
+						// 3 Reset aggregates
+						memset(aggregator->aggregates, 0, ((tposeQuery->outputFile)->fileGroupHeader)->numFields * sizeof(double));
+						// 4 Aggregate value for new id 
+						//(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
+						aggregator->aggregates[groupFieldIndex] += atof(numericTempString);
+
+					}
+
+				}
+					
+				// Reset flags for next row
+				idFoundFlag = 0;
+				groupFoundFlag = 0;
+				numericFoundFlag = 0;
+
+				fieldCount = 0;
+				++fieldSavePtr;
+				if(++totalCharCount == partitionCharLimit) break;
+				continue;
+			}
+			
+			// GROUP FIELD
+			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
+
+				// Get group field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					groupTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == partitionCharLimit) break;
+				}
+				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				// Convert char array to hash
+				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
+					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
+
+				// Insert into btreeGlobal
+				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, hashValue)) != NULL) {
+					groupFoundFlag = 1; // Flag group field as found
+					groupFieldIndex = resultKey->dataOffset; // Is used to correctly order aggregates
+				}
+
+				// Reset variables
+				fieldCharCount = 0;
+				hashValue = 0;
+				
+				if(*fieldSavePtr == fieldDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+			
+			
+			// NUMERIC FIELD
+			if(fieldCount == (tposeQuery->numeric))  { // if group value is empty string we ignore
+
+				numericFoundFlag = 1; // Flag numeric field as found
+				
+				// Copy field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					numericTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == partitionCharLimit) break;
+				}
+				numericTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				// Reset variables
+				fieldCharCount = 0;
+
+				if(*fieldSavePtr == fieldDelimiter) {
+					--totalCharCount;
+					--fieldSavePtr;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+			
+			// ID FIELD
+			if(fieldCount == (tposeQuery->id))  { // if group value is empty string we ignore
+
+				idFoundFlag = 1; // Flag numeric field as found
+				
+				// Copy field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					idTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == partitionCharLimit) break;
+				}
+				idTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				if(firstId) {
+					strcpy(idCurrentString, idTempString); // Set current id to aggregate values for
+					firstId = 0;
+				}
+					
+				// Reset variables
+				fieldCharCount = 0;
+
+				if(*fieldSavePtr == fieldDelimiter) {
+					--totalCharCount;
+					--fieldSavePtr;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+
+			// If not a delimiter or the group field, then ++
+			++fieldSavePtr;
+			if(++totalCharCount == partitionCharLimit) break;
+
+		}
+
+	// Print last line
+	//tposeIOPrintGroupIdData(idCurrentString, tposeQuery);
+	tposeIOPrintGroupIdDataParallel(idCurrentString, tposeQuery, aggregator, threadId);
+
+	debug_print("tposeIOTransposeGroupId(): run tranpose!\n");
+
+}
+
+
+
+void tposeIOTransposeGroupIdReduce(
+	TposeQuery* tposeQuery
+) {
+
+	printf("tposeIOTransposeGroupIdReduce()\n");
+	FILE* fdSrc; 
+	FILE* fdDest = (tposeQuery->outputFile)->fd;
+	char c;
+	unsigned int threadCtr, fieldCtr;
+
+	for(threadCtr=0; threadCtr < fileChunks; threadCtr++) {
+		fdSrc = tempFileArray[threadCtr]->fd;
+		fseek(fdSrc, 0, SEEK_SET);
+		clearerr(fdSrc);
+		while((c = getc(fdSrc)) != EOF) {
+			putc(c, fdDest);
+		}
+	}
 
 }
 
@@ -1906,6 +2360,32 @@ void tposeIOPrintOutput(
 
 
 /** 
+ ** Prints output header
+ **/
+void tposeIOPrintGroupIdHeader(
+	TposeQuery* tposeQuery
+) {
+
+	unsigned char fieldDelimiter = (tposeQuery->outputFile)->fieldDelimiter;
+
+	
+	// Id Header
+	fprintf((tposeQuery->outputFile)->fd, "%s%c", "id", fieldDelimiter);
+
+	int i;
+	// Group Header
+	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+		if(i == (((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1))
+			fprintf((tposeQuery->outputFile)->fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], rowDelimiter);
+		else
+			fprintf((tposeQuery->outputFile)->fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], fieldDelimiter);
+	}
+
+}
+
+
+
+/** 
  ** Prints current line to output
  **/
 void tposeIOPrintGroupIdData(
@@ -1935,25 +2415,59 @@ void tposeIOPrintGroupIdData(
 
 
 /** 
- ** Prints output header
+ ** Prints current line to output (for threads)
  **/
-void tposeIOPrintGroupIdHeader(
-	TposeQuery* tposeQuery
+void tposeIOPrintGroupIdDataParallel(
+	char* id
+	,TposeQuery* tposeQuery
+	,TposeAggregator* aggregator
+	,unsigned int threadId
 ) {
 
 	unsigned char fieldDelimiter = (tposeQuery->outputFile)->fieldDelimiter;
+	FILE* fd = tempFileArray[threadId]->fd;
 
+	int i; // Counter
+
+	// Id
+	fprintf(fd, "%s%c", id, fieldDelimiter);
+
+	// Aggregates
+	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+		if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+			fprintf(fd, "%.0f%c", aggregator->aggregates[i], rowDelimiter);
+		else
+			fprintf(fd, "%.0f%c", aggregator->aggregates[i], fieldDelimiter);
+	}
+
+	fflush(fd);
+
+}
+
+
+
+/** 
+ ** Prints output header (thread)
+ **/
+void tposeIOPrintGroupIdHeaderParallel(
+	TposeQuery* tposeQuery
+	,unsigned int threadId
+) {
+
+	unsigned char fieldDelimiter = (tposeQuery->outputFile)->fieldDelimiter;
+	FILE* fd = tempFileArray[threadId]->fd;
 	
 	// Id Header
-	fprintf((tposeQuery->outputFile)->fd, "%s%c", "id", fieldDelimiter);
+	fprintf(fd, "%s%c", "id", fieldDelimiter);
 
 	int i;
 	// Group Header
 	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
 		if(i == (((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1))
-			fprintf((tposeQuery->outputFile)->fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], rowDelimiter);
+			fprintf(fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], rowDelimiter);
 		else
-			fprintf((tposeQuery->outputFile)->fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], fieldDelimiter);
+			fprintf(fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], fieldDelimiter);
 	}
+
 
 }

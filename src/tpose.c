@@ -247,7 +247,7 @@ int main(
 
 	// Core
 	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
-	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
+	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, "wa", delimiter);
 
 	// Create query
 	TposeQuery* tposeQuery;
@@ -276,7 +276,10 @@ int main(
 	if(groupFlag && numericFlag && !idFlag) {
 		// Parallel
 		btreeGlobal = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
-		tposeIOBuildPartitions(tposeQuery);
+		if(tposeIOBuildPartitions(tposeQuery, TPOSE_IO_PARTITION_GROUP) == -1) {
+			fprintf(stderr, "Error reading input file! Make sure it is correctly formed.\n");
+			exit(EXIT_FAILURE);
+		}
 		tposeIOUniqueGroupsParallel(tposeQuery);
 		tposeIOTransposeGroupParallel(tposeQuery);
 		btreeFree(&btreeGlobal);
@@ -290,11 +293,21 @@ int main(
 	
 	// Transpose Group Id
 	if(groupFlag && numericFlag && idFlag) {
-		//BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+		// Parallel
+		btreeGlobal = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+		if(tposeIOBuildPartitions(tposeQuery, TPOSE_IO_PARTITION_ID) == -1) {
+			fprintf(stderr, "Error reading input file! Make sure it is correctly formed.\n");
+			exit(EXIT_FAILURE);
+		}
 		tposeIOUniqueGroupsParallel(tposeQuery);
-		//tposeIOGetUniqueGroups(tposeQuery, btree);
-		//tposeIOTransposeGroupId(tposeQuery, btree);
-		//btreeFree(&btree);
+		tposeIOTransposeGroupIdParallel(tposeQuery);
+		btreeFree(&btreeGlobal);
+		
+		// Single-threaded
+		/*BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+		tposeIOUniqueGroups(tposeQuery, btree);
+		tposeIOTransposeGroupId(tposeQuery, btree);
+		btreeFree(&btree);*/
 	}
 	
 	//Clean-up

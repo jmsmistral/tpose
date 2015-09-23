@@ -112,7 +112,7 @@
 
 
 	/* Output */
-	TposeOutputFile* tposeIOOpenOutputFile(char* filePath, unsigned char fieldDelimiter);
+	TposeOutputFile* tposeIOOpenOutputFile(char* filePath, const char* mode, unsigned char fieldDelimiter);
 	int tposeIOCloseOutputFile(TposeOutputFile* outputFile);
 
 	TposeOutputFile* tposeIOOutputFileAlloc(FILE* fd, unsigned char fieldDelimiter);
@@ -146,6 +146,9 @@
 
 
 /* parallel test start */
+	
+	#define TPOSE_IO_PARTITION_GROUP 0
+	#define TPOSE_IO_PARTITION_ID 1
 
 	BTree* btreeGlobal; // Needs to persist between computing unique groups, and aggregating values
 
@@ -169,10 +172,12 @@
 
 	unsigned int fileChunks; // Number of file chunks
 	off_t partitions[1000];
+	
+	TposeOutputFile* tempFileArray[1000];
 
 
 	// functions
-	void tposeIOBuildPartitions(TposeQuery* tposeQuery);
+	int tposeIOBuildPartitions(TposeQuery* tposeQuery, unsigned int mode);
 
 	void tposeIOUniqueGroupsParallel(TposeQuery* tposeQuery);
 	void* tposeIOUniqueGroupsMap(void* threadArg);
@@ -182,6 +187,12 @@
 	void* tposeIOTransposeGroupMap(void* threadArg);
 	void tposeIOTransposeGroupReduce(TposeQuery* tposeQuery);
 
+	void tposeIOTransposeGroupIdParallel(TposeQuery* tposeQuery);
+	void* tposeIOTransposeGroupIdMap(void* threadArg);
+	void tposeIOTransposeGroupIdReduce(TposeQuery* tposeQuery);
+
+	void tposeIOPrintGroupIdHeaderParallel(TposeQuery* tposeQuery, unsigned int threadId);
+	void tposeIOPrintGroupIdDataParallel(char* id, TposeQuery* tposeQuery, TposeAggregator* aggregator, unsigned int threadId);
 /* parallel test end */
 
 
