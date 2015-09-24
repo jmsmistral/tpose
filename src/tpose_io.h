@@ -30,8 +30,10 @@
 
 
 	/**
-	 ** Implementation limits
+	 ** Implementation defs & limits
 	 **/
+	#define _FILE_OFFSET_BITS 64 // Enable long file access
+
 	#define TPOSE_IO_MAX_LINE 1048576
 	#define TPOSE_IO_MAX_FIELDS 5000
 	#define TPOSE_IO_MAX_FIELD_WIDTH 5000
@@ -39,11 +41,15 @@
 	#define TPOSE_IO_HASH_MULT 37
 
 	#define TPOSE_IO_CHUNK_SIZE 1073741824
-	#define TPOSE_IO_THREADS 2
 
-	#define _FILE_OFFSET_BITS 64 // Enable long file access
+	#define TPOSE_IO_MODIFY_HEADER 1
+	#define TPOSE_IO_NO_MODIFY_HEADER 0
 
-	extern unsigned char rowDelimiter;
+
+
+	extern unsigned char rowDelimiter; // Defines row delimiter
+	extern char** prefixString;
+	extern char** suffixString;
 
 
 
