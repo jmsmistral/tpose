@@ -47,9 +47,12 @@
 
 
 
+	/**
+	 ** Global vars
+	 **/
 	extern unsigned char rowDelimiter; // Defines row delimiter
-	extern char** prefixString;
-	extern char** suffixString;
+	extern char* prefixGlobal;
+	extern char* suffixGlobal;
 
 
 

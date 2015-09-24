@@ -19,6 +19,8 @@
 #include "tpose_io.h"
 
 unsigned char rowDelimiter = '\n';
+char* prefixGlobal;
+char* suffixGlobal;
 extern int errno;
 
 	
@@ -2262,9 +2264,9 @@ void tposeIOPrintGroupIdHeader(
 	// Group Header
 	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
 		if(i == (((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1))
-			fprintf((tposeQuery->outputFile)->fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], rowDelimiter);
+			fprintf((tposeQuery->outputFile)->fd, "%s%s%s%c", prefixGlobal, ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], suffixGlobal, rowDelimiter);
 		else
-			fprintf((tposeQuery->outputFile)->fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], fieldDelimiter);
+			fprintf((tposeQuery->outputFile)->fd, "%s%s%s%c", prefixGlobal, ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], suffixGlobal, fieldDelimiter);
 	}
 
 }
@@ -2319,9 +2321,9 @@ void tposeIOPrintGroupIdHeaderParallel(
 	// Group Header
 	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
 		if(i == (((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1))
-			fprintf(fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], rowDelimiter);
+			fprintf(fd, "%s%s%s%c", prefixGlobal, ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], suffixGlobal, rowDelimiter);
 		else
-			fprintf(fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], fieldDelimiter);
+			fprintf(fd, "%s%s%s%c", prefixGlobal, ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], suffixGlobal, fieldDelimiter);
 	}
 
 

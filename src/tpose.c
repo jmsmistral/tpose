@@ -41,12 +41,20 @@ static const struct option longopts[] = {
 	,{NULL, 0, NULL, 0}
 };
 
+
+/* Global declarations */
+char* prefixGlobal = "";
+char* suffixGlobal = "";
+
+/* Static declarations */
+static unsigned char delimiter;
+
 /* Forward declarations */
 static void printHelp (int status);
 static void printVersion (int status);
 static void printContact (int status);
 
-static unsigned char delimiter;
+
 
 int main(
 	int argc
@@ -225,6 +233,14 @@ int main(
 		
 	}
 	
+	// Set prefix/suffix
+	if(prefixFlag) { 
+		prefixGlobal = prefixArg;
+	}
+
+	if(suffixFlag) { 
+		suffixGlobal = suffixArg;
+	}
 
 
 	// Check that option dependencies have been specified
