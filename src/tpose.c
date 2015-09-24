@@ -70,7 +70,6 @@ int main(
 	int prefixFlag = 0;
 	int suffixFlag = 0;
 	int aggregateFlag = 0;
-	//int keepFlag = 0;
 	int idFlag = 0;
 	int groupFlag = 0;
 	int numericFlag = 0;
@@ -80,7 +79,6 @@ int main(
 	char* prefixArg = NULL;
 	char* suffixArg = NULL;
 	char* aggregateArg = NULL;
-	//char* keepArg = NULL;
 	char* idArg = NULL;
 	char* groupArg = NULL;
 	char* numericArg = NULL;
@@ -121,12 +119,8 @@ int main(
 				break;
 			case 'a':
 				aggregateFlag = 1;
-				aggregateArg = optarg;
+				aggregateArg = strdup(optarg);
 				break;
-			/*case 'k':
-				keepFlag = 1;
-				keepArg = optarg;
-				break;*/
 			case 'I':
 				idFlag = 1;
 				idArg = strdup(optarg);
@@ -194,7 +188,6 @@ int main(
 			exit(EXIT_FAILURE);
 		}
 
-		//fprintf(stdout, "A delimiter character has been specified\n");
 		delimiter = (char) delimiterArg[0];
 		delimiterSpecified = true;
 	}
@@ -241,6 +234,15 @@ int main(
 	if(suffixFlag) { 
 		suffixGlobal = suffixArg;
 	}
+	
+	// Check aggregation type
+	if(aggregateFlag) {
+		if(strcmp("sum", tposeIOLowerCase(aggregateArg)) && strcmp("count", tposeIOLowerCase(aggregateArg)) && strcmp("avg", tposeIOLowerCase(aggregateArg))) {
+			fprintf(stderr, "-a or --aggregate option requires either 'sum', 'count', or 'avg' to be passed\n");
+			printHelp(1);
+			exit(EXIT_FAILURE);
+		}
+	}
 
 
 	// Check that option dependencies have been specified
@@ -279,21 +281,20 @@ int main(
 	// Create query
 	TposeQuery* tposeQuery;
 	if(!indexedFlag) {
-		if((tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg)) == NULL) {
+		if((tposeQuery = tposeIOQueryAlloc(inputFile, outputFile, idArg, groupArg, numericArg, aggregateArg)) == NULL) {
 			fprintf(stderr, "--id, --group, or --numeric parameters do not match input fields\n");
 			printHelp(1);
 			exit(EXIT_FAILURE);
 		}
 	}
 	else {
-		if((tposeQuery = tposeIOQueryIndexedAlloc(inputFile, outputFile, idIndexedArg, groupIndexedArg, numericIndexedArg)) == NULL) {
+		if((tposeQuery = tposeIOQueryIndexedAlloc(inputFile, outputFile, idIndexedArg, groupIndexedArg, numericIndexedArg, aggregateArg)) == NULL) {
 			fprintf(stderr, "--id, --group, or --numeric parameters do not match input fields\n");
 			printHelp(1);
 			exit(EXIT_FAILURE);
 		}
 	}
 
-	
 	// Transpose Simple
 	if(!groupFlag && !numericFlag && !idFlag) {
 		tposeIOTransposeSimple(tposeQuery);
@@ -364,36 +365,29 @@ static void printHelp
   fprintf(out, "\n\
 Usage: %s input-file [output-file] [--options] \n\n", program_name);
 
-  fprintf(out, "  -d<character>, --delimiter=<character>\n\
-\t\tspecify field delimiter used to read input file\n");
-  fprintf(out, "  -P, --parallel\n\
-\t\tattempts to transpose the data over mulitple threads.\n\
-\t\tThis only applies for files larger than 1GB\n");
-  fprintf(out, "  -i, --indexed\n\
-\t\tuse field indexes (e.g. 1,2,...,<max-fields>) \
-to match fields, instead of field names\n");
-  fprintf(out, "  -p<string>, --prefix=<string>\n\
-\t\tprefix new field names with given string\n");
-  fprintf(out, "  -s<string>, --suffix=<string>\n\
-\t\tsuffix new field names with given string\n");
-  fprintf(out, "  -a<type>, --aggregate=<type>\n\
-\t\taggregates numeric values according to <aggregate-type> passed.\n\
-\t\tcan be either 'SUM', 'COUNT', or 'AVG' (Default = 'SUM')\n\
-\t\t(requires --numeric to be specified\n");
-  fprintf(out, "  -I<field-name>, --id=<field-name>\n\
-\t\tdefines ID field in input file (requires both --group, and --numeric\n");
-  fprintf(out, "  -G<field-name>, --group=<field-name>\n\
-\t\tdefines GROUP field in input file.\n\
-\t\tThis field stores he group values to transpose\n\
-\t\tthe NUMERIC field values over (requires --numeric)\n");
-  fprintf(out, "  -N<field-name>, --numeric=<field-name>\n\
-\t\tdefines NUMERIC field in input file. This field holds the\n\
-\t\tnumeric values to be transposed. These values will be\n\
-\t\taggregated according to the --aggregate option\n");
-  fprintf(out, "  -h, --help\n\
-\t\tdisplay this help and exit\n");
-  fprintf(out, "  -v, --version\n\
-\t\toutput version information and exit\n\n");
+  fprintf(out, "  -d<char>, --delimiter=<char>\
+\tspecify field delimiter used to read input file\n");
+  fprintf(out, "  -P, --parallel\
+\t\tmulti-threaded transpose (files > 1GB)\n");
+  fprintf(out, "  -i, --indexed\
+\t\t\tuse field indexes (e.g. 1,2,...) instead of names\n");
+  fprintf(out, "  -I<field>, --id=<field>\
+\tdefines ID field in input (requires --group and --numeric)\n");
+  fprintf(out, "  -G<field>, --group=<field>\
+\tdefines GROUP field in input (requires --numeric)\n");
+  fprintf(out, "  -N<field>, --numeric=<field>\
+\tdefines NUMERIC field in input. Aggregated with --aggregate\n");
+  fprintf(out, "  -p<string>, --prefix=<string>\
+\tprefix transposed fields with string\n");
+  fprintf(out, "  -s<string>, --suffix=<string>\
+\tsuffix transposed fields with string\n");
+  fprintf(out, "  -a<type>, --aggregate=<type>\
+\taggregate NUMERIC values. Can be 'sum', 'count', or 'avg'.\n\
+\t\t\t\tRequires --numeric to be specified (Default = 'sum')\n");
+  fprintf(out, "  -h, --help\
+\t\t\tdisplay this help and exit\n");
+  fprintf(out, "  -v, --version\
+\t\t\toutput version information and exit\n\n");
 
   printContact(status);
 
@@ -413,9 +407,10 @@ static void printContact
 	char* email = "jmsmistral@gmail.com";
 	FILE *out = status ? stderr : stdout;
 
+	fprintf(out, "Examples can be found at the tpose home page below.\n\n");
+
 	fprintf(out, "tpose home page: <https://www.bitbucket.org/jmsmistral/tpose>.\n");
 
-	//if (!status)
 	fprintf(out, "E-mail bug reports to: Jonathan Sacramento <%s>.\n\
 Be sure to include the word ''TPOSE BUG'' somewhere in the ''Subject:'' field.\n", email);
 

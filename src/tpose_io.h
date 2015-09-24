@@ -42,6 +42,10 @@
 
 	#define TPOSE_IO_CHUNK_SIZE 1073741824
 
+	#define TPOSE_IO_AGGREGATION_SUM 0
+	#define TPOSE_IO_AGGREGATION_COUNT 1
+	#define TPOSE_IO_AGGREGATION_AVG 2
+
 	#define TPOSE_IO_MODIFY_HEADER 1
 	#define TPOSE_IO_NO_MODIFY_HEADER 0
 
@@ -71,6 +75,8 @@
 	 **/
 	typedef struct {
 		double* aggregates;
+		double* counts;
+		double* avgs;
 		unsigned int numFields;
 	} TposeAggregator;
 
@@ -107,6 +113,7 @@
 		int id;
 		int group;
 		int numeric;
+		unsigned int aggregateType;
 	} TposeQuery;
 
 
@@ -135,8 +142,8 @@
 	TposeAggregator* tposeIOAggregatorAlloc(unsigned int numFields);
 	void tposeIOAggregatorFree(TposeAggregator** tposeAggregatorPtr);
 
-	TposeQuery* tposeIOQueryAlloc(TposeInputFile* inputFile, TposeOutputFile* outputFile, char* idVar, char* groupVar, char* numericVar);
-	TposeQuery* tposeIOQueryIndexedAlloc(TposeInputFile* inputFile, TposeOutputFile* outputFile, int idVar, int groupVar, int numericVar);
+	TposeQuery* tposeIOQueryAlloc(TposeInputFile* inputFile, TposeOutputFile* outputFile, char* idVar, char* groupVar, char* numericVar, char* aggregateType);
+	TposeQuery* tposeIOQueryIndexedAlloc(TposeInputFile* inputFile, TposeOutputFile* outputFile, int idVar, int groupVar, int numericVar, char* aggregateType);
 	void tposeIOQueryFree(TposeQuery** tposeQueryPtr);
 
 

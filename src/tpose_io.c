@@ -282,9 +282,21 @@ TposeAggregator* tposeIOAggregatorAlloc(unsigned int numFields)
 		return NULL;
 	}
 
+	if((tposeAggregator->counts = (double*) calloc(numFields, sizeof(double))) == NULL ) {
+		fprintf(stderr, "Error: Cannot allocate aggregator memory\n");
+		return NULL;
+	}
+
+	if((tposeAggregator->avgs = (double*) calloc(numFields, sizeof(double))) == NULL ) {
+		fprintf(stderr, "Error: Cannot allocate aggregator memory\n");
+		return NULL;
+	}
+
 	tposeAggregator->numFields = numFields;
 	
 	assert(tposeAggregator->aggregates != NULL);
+	assert(tposeAggregator->counts != NULL);
+	assert(tposeAggregator->avgs != NULL);
 	assert(tposeAggregator->numFields != 0);
 
 	return tposeAggregator;
@@ -305,8 +317,18 @@ void tposeIOAggregatorFree(
 		free((*tposeAggregatorPtr)->aggregates);
 		(*tposeAggregatorPtr)->aggregates = NULL;
 	}
+	if((*tposeAggregatorPtr)->counts != NULL) {
+		free((*tposeAggregatorPtr)->counts);
+		(*tposeAggregatorPtr)->counts = NULL;
+	}
+	if((*tposeAggregatorPtr)->avgs != NULL) {
+		free((*tposeAggregatorPtr)->avgs);
+		(*tposeAggregatorPtr)->avgs = NULL;
+	}
     
     assert((*tposeAggregatorPtr)->aggregates == NULL);
+    assert((*tposeAggregatorPtr)->counts == NULL);
+    assert((*tposeAggregatorPtr)->avgs == NULL);
 
     if(*tposeAggregatorPtr != NULL) {
         free(*tposeAggregatorPtr);
@@ -329,6 +351,7 @@ TposeQuery* tposeIOQueryAlloc(
 	,char* idVar
 	,char* groupVar
 	,char* numericVar
+	,char* aggregateType
 ) {
 
 	// Check parameters passed
@@ -350,13 +373,27 @@ TposeQuery* tposeIOQueryAlloc(
 	tposeQuery->id = -1;
 	tposeQuery->group = -1;
 	tposeQuery->numeric = -1;
+	tposeQuery->aggregateType = 0;
 	if(idVar != NULL) tposeQuery->id = tposeIOGetFieldIndex(inputFile->fileHeader, idVar);
 	if(groupVar != NULL) tposeQuery->group = tposeIOGetFieldIndex(inputFile->fileHeader, groupVar);
 	if(numericVar != NULL) tposeQuery->numeric = tposeIOGetFieldIndex(inputFile->fileHeader, numericVar);
+	if(aggregateType != NULL) {
+		if(!strcmp("sum", tposeIOLowerCase(aggregateType)))
+			tposeQuery->aggregateType = 0; //TPOSE_IO_AGGREGATION_SUM;
+
+		if(!strcmp("count", tposeIOLowerCase(aggregateType)))
+			tposeQuery->aggregateType = TPOSE_IO_AGGREGATION_COUNT;
+
+		if(!strcmp("avg", tposeIOLowerCase(aggregateType)))
+			tposeQuery->aggregateType = TPOSE_IO_AGGREGATION_AVG;
+	}
 
 	debug_print("tposeIOQueryAlloc(): id = %d\n", tposeQuery->id);
 	debug_print("tposeIOQueryAlloc(): group = %d\n", tposeQuery->group);
 	debug_print("tposeIOQueryAlloc(): numeric = %d\n", tposeQuery->numeric);
+	//printf("tposeIOQueryAlloc(): aggregateType = %s\n", aggregateType);
+	//printf("tposeIOQueryAlloc(): aggregateType = %u\n", tposeQuery->aggregateType);
+	assert(tposeQuery->aggregateType >= TPOSE_IO_AGGREGATION_SUM && tposeQuery->aggregateType <= TPOSE_IO_AGGREGATION_AVG);
 
 	return tposeQuery;
 	
@@ -374,6 +411,7 @@ TposeQuery* tposeIOQueryIndexedAlloc(
 	,int idVar
 	,int groupVar
 	,int numericVar
+	,char* aggregateType
 ) {
 
 	// Correct field indexes so they're zero-based
@@ -410,6 +448,19 @@ TposeQuery* tposeIOQueryIndexedAlloc(
 	if(idVar != -1) tposeQuery->id = idVar;
 	if(groupVar != -1) tposeQuery->group = groupVar;
 	if(numericVar != -1) tposeQuery->numeric = numericVar;
+	if(aggregateType != NULL) {
+		if(!strcmp("sum", tposeIOLowerCase(aggregateType)))
+			tposeQuery->aggregateType = 0; //TPOSE_IO_AGGREGATION_SUM;
+
+		if(!strcmp("count", tposeIOLowerCase(aggregateType)))
+			tposeQuery->aggregateType = TPOSE_IO_AGGREGATION_COUNT;
+
+		if(!strcmp("avg", tposeIOLowerCase(aggregateType)))
+			tposeQuery->aggregateType = TPOSE_IO_AGGREGATION_AVG;
+	}
+	//printf("tposeIOQueryAlloc(): aggregateType = %s\n", aggregateType);
+	//printf("tposeIOQueryAlloc(): aggregateType = %u\n", tposeQuery->aggregateType);
+	assert(tposeQuery->aggregateType >= TPOSE_IO_AGGREGATION_SUM && tposeQuery->aggregateType <= TPOSE_IO_AGGREGATION_AVG);
 
 	return tposeQuery;
 	
@@ -620,6 +671,635 @@ TposeHeader* tposeIOReadInputHeader(
 	}
 
 	return header;
+
+}
+
+
+
+/** 
+ ** Returns a unique list of GROUP variable values 
+ **/
+void tposeIOUniqueGroups(
+	TposeQuery* tposeQuery
+	,BTree* btree
+) {
+
+	// Flags & static vars
+	unsigned int mutateHeader = 1; // Allow for header row to be modified
+	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
+	
+	// Temp allocs
+	TposeHeader* header = tposeIOHeaderAlloc(TPOSE_IO_MAX_FIELDS, mutateHeader); // Allocate the needed memory
+	BTreeKey* key = btreeKeyAlloc();
+	BTreeKey* resultKey;
+	char tempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char* allocString;
+	char* fieldSavePtr; // Points at start of each field after every loop
+
+	// Counters & limits
+	off_t rowCount = 2; // For debugging only
+	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
+	off_t uniqueGroupCount = 0; // Used to index array of header ptrs
+	off_t groupCharCount = 0; 
+	off_t hashCharCount = 0; 
+	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
+	off_t hashValue = 0; 
+	off_t fileSize = (tposeQuery->inputFile)->fileSize; 
+	off_t rFileSize = fileSize; // Remaining file size
+	unsigned int chunks = 1; // Number of file chunks
+
+
+	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
+
+
+	// Calculate file chunks
+	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
+		++chunks;
+		rFileSize -= TPOSE_IO_CHUNK_SIZE;
+	}
+
+
+	// Split large files into chunks
+	int chunkCtr;
+	off_t iFileSize;
+	for(chunkCtr = 1; chunkCtr <= chunks; chunkCtr++) {
+		
+		// Set file size limit for current chunk
+		if(chunkCtr == chunks)
+			iFileSize = rFileSize;
+		else
+			iFileSize = TPOSE_IO_CHUNK_SIZE;
+
+		// Reset vars for each chunk
+		totalCharCount = 0;
+			
+		// Process each chunk
+		while(totalCharCount <= iFileSize) {
+
+			// FIELD DELIMITER
+			if(*fieldSavePtr == fieldDelimiter) {
+				++fieldCount;
+				++fieldSavePtr;
+				if(++totalCharCount == iFileSize) break;
+				continue;
+			}
+
+			// ROW DELIMITER
+			if(*fieldSavePtr == rowDelimiter) {
+				fieldCount = 0;
+				++rowCount;
+				++fieldSavePtr;
+				if(++totalCharCount == iFileSize) break;
+				continue;
+			}
+			
+			// GROUP FIELD
+			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
+
+				// Copy field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tempString[groupCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == fileSize) break;
+				}
+				tempString[groupCharCount] = '\0'; // Null-terminate string
+
+				// Convert char array to hash
+				for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
+					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
+
+				// Insert into btree
+				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) == NULL) {
+
+					// Check for collisions - print only when we add a unique group
+					debug_print("tposeIOgetUniqueGroups(): New group value found = '");
+					debug_print("tposeIOgetUniqueGroups(): row %u = %s\t%ld\t%u\n", rowCount, tempString, hashValue, uniqueGroupCount);
+
+					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
+					if(btreeInsert(btree, key) == -1)
+						fprintf(stderr, "Error: Cannot insert value into btree\n");
+
+					// Insert into TposeHeader object
+					allocString = malloc(strlen(tempString) * sizeof(char));
+					strcpy(allocString, tempString);
+					*(header->fields+(uniqueGroupCount++)) = allocString;
+					header->numFields = uniqueGroupCount; // Update number of fields in header
+				}
+
+				// Reset variables (
+				groupCharCount = 0;
+				hashValue = 0;
+				
+				if(*fieldSavePtr == fieldDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+
+			// If not a delimiter or group field, then ++
+			++fieldSavePtr;
+			if(++totalCharCount == iFileSize) break;
+
+		}
+
+	} // End for-loop over chunks 
+
+	btreeKeyFree(&key);
+
+	// Assign groups to output file header 
+	(tposeQuery->outputFile)->fileGroupHeader = header; 
+	
+}
+
+
+
+/** 
+ ** "Simple" tranpose of rows-to-columns (naive algorithm)
+ **/
+void tposeIOTransposeSimple(
+	TposeQuery* tposeQuery
+) {
+
+	// Flags & static vars
+	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
+	off_t numFields = ((tposeQuery->inputFile)->fileHeader)->maxFields;
+	off_t fileSize = (tposeQuery->inputFile)->fileSize; 
+
+	// Temp allocs
+	char fieldTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char* fieldSavePtr; 
+
+	// Counters & limits
+	unsigned int fieldCount = 0; // points at first field when loop starts 
+	unsigned int fieldCharCount = 0; 
+	unsigned int currentField = 0;
+	off_t totalCharCount = 0; // mmap files are page aligned, so we end-up reading garbage after file data ends
+
+
+	// Process each field at a time
+	for(currentField = 0; currentField < numFields; ++currentField) {
+
+		fieldSavePtr = (tposeQuery->inputFile)->fileAddr; // Re-initialise pointer to data 
+		totalCharCount = 0;
+
+		// Scan the file
+		while(totalCharCount <= (tposeQuery->inputFile)->fileSize) {
+
+			// FIELD DELIMITER
+			if(*fieldSavePtr == fieldDelimiter) {
+				++fieldCount;
+				++fieldSavePtr;
+				if(++totalCharCount == fileSize) break;
+				continue;
+			}
+
+			// ROW DELIMITER
+			if(*fieldSavePtr == rowDelimiter) {
+				if((fieldCount != 0) && (fieldCount == numFields - 1)) {
+					// Print output
+					fprintf((tposeQuery->outputFile)->fd, "%s%c", fieldTempString, fieldDelimiter);
+					fflush((tposeQuery->outputFile)->fd); 
+				}
+					
+				// Reset flags for next row
+				fieldCount = 0;
+
+				++fieldSavePtr;
+				if(++totalCharCount == fileSize) break;
+				continue;
+			}
+			
+			// CURRENT FIELD BEING PROCESSED
+			if((totalCharCount != (tposeQuery->inputFile)->fileSize) && (fieldCount == currentField))  { // if group value is empty string we ignore
+
+				// Get current field value
+				while((*fieldSavePtr != fieldDelimiter) && (*fieldSavePtr != rowDelimiter)) {
+					fieldTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == fileSize) break;
+				}
+				fieldTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				// Reset variables
+				fieldCharCount = 0;
+				
+				if(*fieldSavePtr == fieldDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+			
+			// If not a delimiter or the counted field, then ++
+			++fieldSavePtr;
+			if(++totalCharCount == fileSize) break;
+
+		} // End while-loop
+
+		fprintf((tposeQuery->outputFile)->fd, "%c", rowDelimiter); // Output a new line after each iteration
+		fflush((tposeQuery->outputFile)->fd);
+		
+	
+	} // End for-loop
+
+}
+
+
+
+/** 
+ ** Transposes numeric values for each unique group value
+ **/
+void tposeIOTransposeGroup(
+	TposeQuery* tposeQuery
+	,BTree* btree
+) {
+
+	// Flags & static vars
+	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
+	unsigned int groupFoundFlag = 0; // 1 when we find the group field, 0 otherwise (0 if there is no group value)
+	unsigned int numericFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
+
+	// Temp allocs
+	tposeQuery->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields);
+	BTreeKey* resultKey;
+	char groupTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char numericTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char* fieldSavePtr;
+	
+	// Counters & limits
+	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
+	unsigned int fieldCharCount = 0;
+	unsigned int hashCharCount = 0; 
+	off_t hashValue = 0; 
+	off_t totalCharCount = 0; // mmap files are page aligned, so we end-up reading garbage after file data ends
+	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
+	off_t fileSize = (tposeQuery->inputFile)->fileSize;
+	off_t rFileSize = fileSize;
+	unsigned int chunks = 1; // Number of file chunks
+
+
+	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
+
+
+	// Calculate file chunks
+	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
+		++chunks;
+		rFileSize -= TPOSE_IO_CHUNK_SIZE;
+	}
+
+
+	// Split large files into chunks
+	int chunkCtr;
+	off_t iFileSize;
+	for(chunkCtr = 1; chunkCtr <= chunks; chunkCtr++) {
+		
+		// Set file size limit for current chunk
+		if(chunkCtr == chunks)
+			iFileSize = rFileSize;
+		else
+			iFileSize = TPOSE_IO_CHUNK_SIZE;
+
+		totalCharCount = 0; // Reset count
+
+		// Process each chunk
+		while(totalCharCount <= iFileSize) {
+
+			// FIELD DELIMITER
+			if(*fieldSavePtr == fieldDelimiter) {
+				++fieldCount;
+				++fieldSavePtr;
+				if(++totalCharCount == iFileSize) break;
+				continue;
+			}
+
+			// ROW DELIMITER
+			if(*fieldSavePtr == rowDelimiter) {
+
+				// Aggregate value for each group
+				if((groupFoundFlag == 1) && (numericFoundFlag == 1)) {
+					(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
+					(tposeQuery->aggregator)->counts[groupFieldIndex]++;
+				}
+					
+				// Reset flags for next row
+				groupFoundFlag = 0;
+				numericFoundFlag = 0;
+
+				fieldCount = 0;
+				++fieldSavePtr;
+				if(++totalCharCount == iFileSize) break;
+				continue;
+
+			}
+
+			// GROUP FIELD
+			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
+
+				// Get group field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					groupTempString[fieldCharCount++] = *fieldSavePtr++;
+					++totalCharCount;
+				}
+				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				// Convert char array to hash
+				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
+					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
+
+				// Insert into btree
+				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) != NULL) {
+					groupFoundFlag = 1; // Flag group field as found
+					groupFieldIndex = resultKey->dataOffset;
+				}
+
+				// Reset variables
+				fieldCharCount = 0;
+				hashValue = 0;
+				
+				if(*fieldSavePtr == fieldDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+			
+			// NUMERIC FIELD
+			if(fieldCount == (tposeQuery->numeric))  { // if group value is empty string we ignore
+
+				numericFoundFlag = 1; // Flag numeric field as found
+				
+				// Copy field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					numericTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == iFileSize) break;
+				}
+				numericTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				// Reset vars
+				fieldCharCount = 0;
+
+				if(*fieldSavePtr == fieldDelimiter) {
+					--totalCharCount;
+					--fieldSavePtr;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+
+			// If not a delimiter or group field, then ++
+			++fieldSavePtr;
+			if(++totalCharCount == iFileSize) break;
+
+		}
+
+	} // End for-loop
+// NIGGA1
+	// Calculate averges
+	int ctr;
+	for(ctr = 0; ctr < ((tposeQuery->outputFile)->fileGroupHeader)->numFields; ++ctr)
+		(tposeQuery->aggregator)->avgs[ctr] = (tposeQuery->aggregator)->aggregates[ctr] / (tposeQuery->aggregator)->counts[ctr];
+
+	tposeIOPrintOutput(tposeQuery);
+
+}
+
+
+
+/** 
+ ** Transposes numeric values for each unique group and id value
+ **/
+void tposeIOTransposeGroupId(
+	TposeQuery* tposeQuery
+	,BTree* btree
+) {
+
+	// Flags & static vars
+	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
+
+	// Temp allocs
+	tposeQuery->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields); // Aggregates values
+	BTreeKey* resultKey; // Used for searching the btree
+	char idCurrentString[TPOSE_IO_MAX_FIELD_WIDTH]; // Holds current id value being aggregated
+	char idTempString[TPOSE_IO_MAX_FIELD_WIDTH]; // Holds id value for each row
+	char groupTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char numericTempString[TPOSE_IO_MAX_FIELD_WIDTH];
+	char* fieldSavePtr;
+
+	// Counters & limits
+	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
+	unsigned int fieldCharCount = 0;
+	unsigned int firstId = 1;
+	unsigned int idFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
+	unsigned int groupFoundFlag = 0; // 1 when we find the group field, 0 otherwise (0 if there is no group value)
+	unsigned int numericFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
+	int ctr; // Iterates over group fields to calculate average values
+	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
+	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
+	off_t hashCharCount = 0; 
+	off_t hashValue = 0; 
+	off_t fileSize = (tposeQuery->inputFile)->fileSize;
+	off_t rFileSize = fileSize;
+	unsigned int chunks = 1; // Number of file chunks
+
+	// Print output header
+	tposeIOPrintGroupIdHeader(tposeQuery); 
+
+
+	// Calculate file chunks
+	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
+		++chunks;
+		rFileSize -= TPOSE_IO_CHUNK_SIZE;
+	}
+
+	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
+
+
+	// Split large files into chunks
+	int chunkCtr;
+	off_t iFileSize;
+	for(chunkCtr = 1; chunkCtr <= chunks; chunkCtr++) {
+		
+		// Set file size limit for current chunk
+		if(chunkCtr == chunks)
+			iFileSize = rFileSize;
+		else
+			iFileSize = TPOSE_IO_CHUNK_SIZE;
+
+		totalCharCount = 0; // Reset count
+
+		// Process each chunk
+		while(totalCharCount <= iFileSize) {
+
+			// FIELD DELIMITER
+			if(*fieldSavePtr == fieldDelimiter) {
+				++fieldCount;
+				++fieldSavePtr;
+				if(++totalCharCount == iFileSize) break;
+				continue;
+			}
+
+			// ROW DELIMITER
+			if(*fieldSavePtr == rowDelimiter) {
+
+				if((idFoundFlag == 1) && (groupFoundFlag == 1) && (numericFoundFlag == 1)) {
+
+					if(!strcmp(idCurrentString, idTempString)) {
+						// Aggregate value for each group
+						(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
+						(tposeQuery->aggregator)->counts[groupFieldIndex]++;
+					}
+					else {
+						// 0 Compute averages
+						for(ctr = 0; ctr < ((tposeQuery->outputFile)->fileGroupHeader)->numFields; ++ctr)
+							(tposeQuery->aggregator)->avgs[ctr] = (tposeQuery->aggregator)->aggregates[ctr] / (tposeQuery->aggregator)->counts[ctr];
+						
+						// 1 Print out current aggregates for id
+						tposeIOPrintGroupIdData(idCurrentString, tposeQuery);
+						// 2 Set new string as current id
+						strcpy(idCurrentString, idTempString); // Set current id to aggregate values for
+						// 3 Reset aggregates
+						memset((tposeQuery->aggregator)->aggregates, 0, ((tposeQuery->outputFile)->fileGroupHeader)->numFields * sizeof(double));
+						memset((tposeQuery->aggregator)->counts, 0, ((tposeQuery->outputFile)->fileGroupHeader)->numFields * sizeof(double));
+						memset((tposeQuery->aggregator)->avgs, 0, ((tposeQuery->outputFile)->fileGroupHeader)->numFields * sizeof(double));
+						// 4 Aggregate value for new id 
+						(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
+						(tposeQuery->aggregator)->counts[groupFieldIndex]++;
+
+					}
+
+				}
+					
+				// Reset flags for next row
+				idFoundFlag = 0;
+				groupFoundFlag = 0;
+				numericFoundFlag = 0;
+
+				fieldCount = 0;
+				++fieldSavePtr;
+				if(++totalCharCount == iFileSize) break;
+				continue;
+			}
+			
+			// GROUP FIELD
+			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
+
+				// Get group field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					groupTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == iFileSize) break;
+				}
+				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				// Convert char array to hash
+				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
+					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
+
+				// Insert into btree
+				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) != NULL) {
+					groupFoundFlag = 1; // Flag group field as found
+					groupFieldIndex = resultKey->dataOffset; // Is used to correctly order aggregates
+				}
+
+				// Reset variables
+				fieldCharCount = 0;
+				hashValue = 0;
+				
+				if(*fieldSavePtr == fieldDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+			
+			
+			// NUMERIC FIELD
+			if(fieldCount == (tposeQuery->numeric))  { // if group value is empty string we ignore
+
+				numericFoundFlag = 1; // Flag numeric field as found
+				
+				// Copy field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					numericTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == iFileSize) break;
+				}
+				numericTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				// Reset variables
+				fieldCharCount = 0;
+
+				if(*fieldSavePtr == fieldDelimiter) {
+					--totalCharCount;
+					--fieldSavePtr;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+			
+			// ID FIELD
+			if(fieldCount == (tposeQuery->id))  { // if group value is empty string we ignore
+
+				idFoundFlag = 1; // Flag numeric field as found
+				
+				// Copy field value
+				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					idTempString[fieldCharCount++] = *fieldSavePtr++;
+					if(++totalCharCount == iFileSize) break;
+				}
+				idTempString[fieldCharCount] = '\0'; // Null-terminate string
+
+				if(firstId) {
+					strcpy(idCurrentString, idTempString); // Set current id to aggregate values for
+					firstId = 0;
+				}
+					
+				// Reset variables
+				fieldCharCount = 0;
+
+				if(*fieldSavePtr == fieldDelimiter) {
+					--totalCharCount;
+					--fieldSavePtr;
+				}
+
+				if(*fieldSavePtr == rowDelimiter) {
+					--fieldSavePtr;
+					--totalCharCount;
+				}
+			}
+
+			// If not a delimiter or the group field, then ++
+			++fieldSavePtr;
+			if(++totalCharCount == iFileSize) break;
+
+		}
+
+	} // End for-loop
+
+	for(ctr = 0; ctr < ((tposeQuery->outputFile)->fileGroupHeader)->numFields; ++ctr)
+		(tposeQuery->aggregator)->avgs[ctr] = (tposeQuery->aggregator)->aggregates[ctr] / (tposeQuery->aggregator)->counts[ctr];
+
+	// Print last line
+	tposeIOPrintGroupIdData(idCurrentString, tposeQuery);
 
 }
 
@@ -1192,8 +1872,10 @@ void* tposeIOTransposeGroupMap(
 			// ROW DELIMITER
 			if(*fieldSavePtr == rowDelimiter) {
 				// Aggregate value for each group
-				if((groupFoundFlag == 1) && (numericFoundFlag == 1))
+				if((groupFoundFlag == 1) && (numericFoundFlag == 1)) {
 					aggregator->aggregates[groupFieldIndex] += atof(numericTempString);
+					aggregator->counts[groupFieldIndex]++;
+				}
 					
 				// Reset flags for next row
 				groupFoundFlag = 0;
@@ -1292,8 +1974,14 @@ void tposeIOTransposeGroupReduce(
 	for(threadCtr=0; threadCtr < fileChunks; threadCtr++) {
 		for(fieldCtr=0; fieldCtr < (threadAggregatorArray[threadCtr]->aggregator)->numFields; fieldCtr++) {
 			(tposeQuery->aggregator)->aggregates[fieldCtr] += (threadAggregatorArray[threadCtr]->aggregator)->aggregates[fieldCtr];
+			(tposeQuery->aggregator)->counts[fieldCtr] += (threadAggregatorArray[threadCtr]->aggregator)->counts[fieldCtr];
 		}
 	}
+
+	// Calculate averages
+	int ctr;
+	for(ctr = 0; ctr < ((tposeQuery->outputFile)->fileGroupHeader)->numFields; ++ctr)
+		(tposeQuery->aggregator)->avgs[ctr] = (tposeQuery->aggregator)->aggregates[ctr] / (tposeQuery->aggregator)->counts[ctr];
 
 	// Print aggregates to final output
 	tposeIOPrintOutput(tposeQuery);
@@ -1410,6 +2098,7 @@ void* tposeIOTransposeGroupIdMap(
 	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
 	unsigned int fieldCharCount = 0;
 	unsigned int firstId = 1;
+	int ctr; // Iterates over group fields to calculate average values
 	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
 	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
 	off_t hashCharCount = 0; 
@@ -1439,12 +2128,16 @@ void* tposeIOTransposeGroupIdMap(
 			if(*fieldSavePtr == rowDelimiter) {
 
 				if((idFoundFlag == 1) && (groupFoundFlag == 1) && (numericFoundFlag == 1)) {
-
 					if(!strcmp(idCurrentString, idTempString)) {
 						// Aggregate value for each group
 						aggregator->aggregates[groupFieldIndex] += atof(numericTempString);
+						aggregator->counts[groupFieldIndex]++;
 					}
 					else {
+
+						// 0 Compute averages
+						for(ctr = 0; ctr < ((tposeQuery->outputFile)->fileGroupHeader)->numFields; ++ctr)
+							aggregator->avgs[ctr] = aggregator->aggregates[ctr] / aggregator->counts[ctr];
 
 						// 1 Print out current aggregates for id
 						tposeIOPrintGroupIdDataParallel(idCurrentString, tposeQuery, aggregator, threadId);
@@ -1452,8 +2145,11 @@ void* tposeIOTransposeGroupIdMap(
 						strcpy(idCurrentString, idTempString); // Set current id to aggregate values for
 						// 3 Reset aggregates
 						memset(aggregator->aggregates, 0, ((tposeQuery->outputFile)->fileGroupHeader)->numFields * sizeof(double));
+						memset(aggregator->counts, 0, ((tposeQuery->outputFile)->fileGroupHeader)->numFields * sizeof(double));
+						memset(aggregator->avgs, 0, ((tposeQuery->outputFile)->fileGroupHeader)->numFields * sizeof(double));
 						// 4 Aggregate value for new id 
 						aggregator->aggregates[groupFieldIndex] += atof(numericTempString);
+						aggregator->counts[groupFieldIndex]++;
 
 					}
 
@@ -1569,6 +2265,10 @@ void* tposeIOTransposeGroupIdMap(
 
 		}
 
+	// Compute averages
+	for(ctr = 0; ctr < ((tposeQuery->outputFile)->fileGroupHeader)->numFields; ++ctr)
+		aggregator->avgs[ctr] = aggregator->aggregates[ctr] / aggregator->counts[ctr];
+
 	// Print last line
 	tposeIOPrintGroupIdDataParallel(idCurrentString, tposeQuery, aggregator, threadId);
 
@@ -1604,617 +2304,6 @@ void tposeIOTransposeGroupIdReduce(
 
 
 /** 
- ** Returns a unique list of GROUP variable values 
- **/
-void tposeIOUniqueGroups(
-	TposeQuery* tposeQuery
-	,BTree* btree
-) {
-
-	// Flags & static vars
-	unsigned int mutateHeader = 1; // Allow for header row to be modified
-	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
-	
-	// Temp allocs
-	TposeHeader* header = tposeIOHeaderAlloc(TPOSE_IO_MAX_FIELDS, mutateHeader); // Allocate the needed memory
-	BTreeKey* key = btreeKeyAlloc();
-	BTreeKey* resultKey;
-	char tempString[TPOSE_IO_MAX_FIELD_WIDTH];
-	char* allocString;
-	char* fieldSavePtr; // Points at start of each field after every loop
-
-	// Counters & limits
-	off_t rowCount = 2; // For debugging only
-	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
-	off_t uniqueGroupCount = 0; // Used to index array of header ptrs
-	off_t groupCharCount = 0; 
-	off_t hashCharCount = 0; 
-	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashValue = 0; 
-	off_t fileSize = (tposeQuery->inputFile)->fileSize; 
-	off_t rFileSize = fileSize; // Remaining file size
-	unsigned int chunks = 1; // Number of file chunks
-
-
-	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
-
-
-	// Calculate file chunks
-	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
-		++chunks;
-		rFileSize -= TPOSE_IO_CHUNK_SIZE;
-	}
-
-
-	// Split large files into chunks
-	int chunkCtr;
-	off_t iFileSize;
-	for(chunkCtr = 1; chunkCtr <= chunks; chunkCtr++) {
-		
-		// Set file size limit for current chunk
-		if(chunkCtr == chunks)
-			iFileSize = rFileSize;
-		else
-			iFileSize = TPOSE_IO_CHUNK_SIZE;
-
-		// Reset vars for each chunk
-		totalCharCount = 0;
-			
-		// Process each chunk
-		while(totalCharCount <= iFileSize) {
-
-			// FIELD DELIMITER
-			if(*fieldSavePtr == fieldDelimiter) {
-				++fieldCount;
-				++fieldSavePtr;
-				if(++totalCharCount == iFileSize) break;
-				continue;
-			}
-
-			// ROW DELIMITER
-			if(*fieldSavePtr == rowDelimiter) {
-				fieldCount = 0;
-				++rowCount;
-				++fieldSavePtr;
-				if(++totalCharCount == iFileSize) break;
-				continue;
-			}
-			
-			// GROUP FIELD
-			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
-
-				// Copy field value
-				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
-					tempString[groupCharCount++] = *fieldSavePtr++;
-					if(++totalCharCount == fileSize) break;
-				}
-				tempString[groupCharCount] = '\0'; // Null-terminate string
-
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
-
-				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) == NULL) {
-
-					// Check for collisions - print only when we add a unique group
-					debug_print("tposeIOgetUniqueGroups(): New group value found = '");
-					debug_print("tposeIOgetUniqueGroups(): row %u = %s\t%ld\t%u\n", rowCount, tempString, hashValue, uniqueGroupCount);
-
-					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
-					if(btreeInsert(btree, key) == -1)
-						fprintf(stderr, "Error: Cannot insert value into btree\n");
-
-					// Insert into TposeHeader object
-					allocString = malloc(strlen(tempString) * sizeof(char));
-					strcpy(allocString, tempString);
-					*(header->fields+(uniqueGroupCount++)) = allocString;
-					header->numFields = uniqueGroupCount; // Update number of fields in header
-				}
-
-				// Reset variables (
-				groupCharCount = 0;
-				hashValue = 0;
-				
-				if(*fieldSavePtr == fieldDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-
-				if(*fieldSavePtr == rowDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-			}
-
-			// If not a delimiter or group field, then ++
-			++fieldSavePtr;
-			if(++totalCharCount == iFileSize) break;
-
-		}
-
-	} // End for-loop over chunks 
-
-	btreeKeyFree(&key);
-
-	// Assign groups to output file header 
-	(tposeQuery->outputFile)->fileGroupHeader = header; 
-	
-}
-
-
-
-/** 
- ** "Simple" tranpose of rows-to-columns (naive algorithm)
- **/
-void tposeIOTransposeSimple(
-	TposeQuery* tposeQuery
-) {
-
-	// Flags & static vars
-	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
-	off_t numFields = ((tposeQuery->inputFile)->fileHeader)->maxFields;
-	off_t fileSize = (tposeQuery->inputFile)->fileSize; 
-
-	// Temp allocs
-	char fieldTempString[TPOSE_IO_MAX_FIELD_WIDTH];
-	char* fieldSavePtr; 
-
-	// Counters & limits
-	unsigned int fieldCount = 0; // points at first field when loop starts 
-	unsigned int fieldCharCount = 0; 
-	unsigned int currentField = 0;
-	off_t totalCharCount = 0; // mmap files are page aligned, so we end-up reading garbage after file data ends
-
-
-	// Process each field at a time
-	for(currentField = 0; currentField < numFields; ++currentField) {
-
-		fieldSavePtr = (tposeQuery->inputFile)->fileAddr; // Re-initialise pointer to data 
-		totalCharCount = 0;
-
-		// Scan the file
-		while(totalCharCount <= (tposeQuery->inputFile)->fileSize) {
-
-			// FIELD DELIMITER
-			if(*fieldSavePtr == fieldDelimiter) {
-				++fieldCount;
-				++fieldSavePtr;
-				if(++totalCharCount == fileSize) break;
-				continue;
-			}
-
-			// ROW DELIMITER
-			if(*fieldSavePtr == rowDelimiter) {
-				if((fieldCount != 0) && (fieldCount == numFields - 1)) {
-					// Print output
-					fprintf((tposeQuery->outputFile)->fd, "%s%c", fieldTempString, fieldDelimiter);
-					fflush((tposeQuery->outputFile)->fd); 
-				}
-					
-				// Reset flags for next row
-				fieldCount = 0;
-
-				++fieldSavePtr;
-				if(++totalCharCount == fileSize) break;
-				continue;
-			}
-			
-			// CURRENT FIELD BEING PROCESSED
-			if((totalCharCount != (tposeQuery->inputFile)->fileSize) && (fieldCount == currentField))  { // if group value is empty string we ignore
-
-				// Get current field value
-				while((*fieldSavePtr != fieldDelimiter) && (*fieldSavePtr != rowDelimiter)) {
-					fieldTempString[fieldCharCount++] = *fieldSavePtr++;
-					if(++totalCharCount == fileSize) break;
-				}
-				fieldTempString[fieldCharCount] = '\0'; // Null-terminate string
-
-				// Reset variables
-				fieldCharCount = 0;
-				
-				if(*fieldSavePtr == fieldDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-
-				if(*fieldSavePtr == rowDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-			}
-			
-			// If not a delimiter or the counted field, then ++
-			++fieldSavePtr;
-			if(++totalCharCount == fileSize) break;
-
-		} // End while-loop
-
-		fprintf((tposeQuery->outputFile)->fd, "%c", rowDelimiter); // Output a new line after each iteration
-		fflush((tposeQuery->outputFile)->fd);
-		
-	
-	} // End for-loop
-
-}
-
-
-
-/** 
- ** Transposes numeric values for each unique group value
- **/
-void tposeIOTransposeGroup(
-	TposeQuery* tposeQuery
-	,BTree* btree
-) {
-
-	// Flags & static vars
-	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
-	unsigned int groupFoundFlag = 0; // 1 when we find the group field, 0 otherwise (0 if there is no group value)
-	unsigned int numericFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
-
-	// Temp allocs
-	tposeQuery->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields);
-	BTreeKey* resultKey;
-	char groupTempString[TPOSE_IO_MAX_FIELD_WIDTH];
-	char numericTempString[TPOSE_IO_MAX_FIELD_WIDTH];
-	char* fieldSavePtr;
-	
-	// Counters & limits
-	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
-	unsigned int fieldCharCount = 0;
-	unsigned int hashCharCount = 0; 
-	off_t hashValue = 0; 
-	off_t totalCharCount = 0; // mmap files are page aligned, so we end-up reading garbage after file data ends
-	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
-	off_t fileSize = (tposeQuery->inputFile)->fileSize;
-	off_t rFileSize = fileSize;
-	unsigned int chunks = 1; // Number of file chunks
-
-
-	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
-
-
-	// Calculate file chunks
-	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
-		++chunks;
-		rFileSize -= TPOSE_IO_CHUNK_SIZE;
-	}
-
-
-	// Split large files into chunks
-	int chunkCtr;
-	off_t iFileSize;
-	for(chunkCtr = 1; chunkCtr <= chunks; chunkCtr++) {
-		
-		// Set file size limit for current chunk
-		if(chunkCtr == chunks)
-			iFileSize = rFileSize;
-		else
-			iFileSize = TPOSE_IO_CHUNK_SIZE;
-
-		totalCharCount = 0; // Reset count
-
-		// Process each chunk
-		while(totalCharCount <= iFileSize) {
-
-			// FIELD DELIMITER
-			if(*fieldSavePtr == fieldDelimiter) {
-				++fieldCount;
-				++fieldSavePtr;
-				if(++totalCharCount == iFileSize) break;
-				continue;
-			}
-
-			// ROW DELIMITER
-			if(*fieldSavePtr == rowDelimiter) {
-
-				// Aggregate value for each group
-				if((groupFoundFlag == 1) && (numericFoundFlag == 1))
-					(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
-					
-				// Reset flags for next row
-				groupFoundFlag = 0;
-				numericFoundFlag = 0;
-
-				fieldCount = 0;
-				++fieldSavePtr;
-				if(++totalCharCount == iFileSize) break;
-				continue;
-
-			}
-
-			// GROUP FIELD
-			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
-
-				// Get group field value
-				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
-					groupTempString[fieldCharCount++] = *fieldSavePtr++;
-					++totalCharCount;
-				}
-				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
-
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
-
-				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) != NULL) {
-					groupFoundFlag = 1; // Flag group field as found
-					groupFieldIndex = resultKey->dataOffset;
-				}
-
-				// Reset variables
-				fieldCharCount = 0;
-				hashValue = 0;
-				
-				if(*fieldSavePtr == fieldDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-
-				if(*fieldSavePtr == rowDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-			}
-			
-			// NUMERIC FIELD
-			if(fieldCount == (tposeQuery->numeric))  { // if group value is empty string we ignore
-
-				numericFoundFlag = 1; // Flag numeric field as found
-				
-				// Copy field value
-				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
-					numericTempString[fieldCharCount++] = *fieldSavePtr++;
-					if(++totalCharCount == iFileSize) break;
-				}
-				numericTempString[fieldCharCount] = '\0'; // Null-terminate string
-
-				// Reset vars
-				fieldCharCount = 0;
-
-				if(*fieldSavePtr == fieldDelimiter) {
-					--totalCharCount;
-					--fieldSavePtr;
-				}
-
-				if(*fieldSavePtr == rowDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-			}
-
-			// If not a delimiter or group field, then ++
-			++fieldSavePtr;
-			if(++totalCharCount == iFileSize) break;
-
-		}
-
-	} // End for-loop
-
-	tposeIOPrintOutput(tposeQuery);
-
-}
-
-
-
-/** 
- ** Transposes numeric values for each unique group and id value
- **/
-void tposeIOTransposeGroupId(
-	TposeQuery* tposeQuery
-	,BTree* btree
-) {
-
-	// Flags & static vars
-	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
-
-	// Temp allocs
-	tposeQuery->aggregator = tposeIOAggregatorAlloc(((tposeQuery->outputFile)->fileGroupHeader)->numFields); // Aggregates values
-	BTreeKey* resultKey; // Used for searching the btree
-	char idCurrentString[TPOSE_IO_MAX_FIELD_WIDTH]; // Holds current id value being aggregated
-	char idTempString[TPOSE_IO_MAX_FIELD_WIDTH]; // Holds id value for each row
-	char groupTempString[TPOSE_IO_MAX_FIELD_WIDTH];
-	char numericTempString[TPOSE_IO_MAX_FIELD_WIDTH];
-	char* fieldSavePtr;
-
-	// Counters & limits
-	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
-	unsigned int fieldCharCount = 0;
-	unsigned int firstId = 1;
-	unsigned int idFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
-	unsigned int groupFoundFlag = 0; // 1 when we find the group field, 0 otherwise (0 if there is no group value)
-	unsigned int numericFoundFlag = 0; // 1 when we find the numeric field, 0 otherwise (0 if there is no numeric value)
-	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
-	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashCharCount = 0; 
-	off_t hashValue = 0; 
-	off_t fileSize = (tposeQuery->inputFile)->fileSize;
-	off_t rFileSize = fileSize;
-	unsigned int chunks = 1; // Number of file chunks
-
-	// Print output header
-	tposeIOPrintGroupIdHeader(tposeQuery); 
-
-
-	// Calculate file chunks
-	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
-		++chunks;
-		rFileSize -= TPOSE_IO_CHUNK_SIZE;
-	}
-
-	fieldSavePtr = (tposeQuery->inputFile)->dataAddr; // Init with ptr to second row (where data starts)
-
-
-	// Split large files into chunks
-	int chunkCtr;
-	off_t iFileSize;
-	for(chunkCtr = 1; chunkCtr <= chunks; chunkCtr++) {
-		
-		// Set file size limit for current chunk
-		if(chunkCtr == chunks)
-			iFileSize = rFileSize;
-		else
-			iFileSize = TPOSE_IO_CHUNK_SIZE;
-
-		totalCharCount = 0; // Reset count
-
-		// Process each chunk
-		while(totalCharCount <= iFileSize) {
-
-			// FIELD DELIMITER
-			if(*fieldSavePtr == fieldDelimiter) {
-				++fieldCount;
-				++fieldSavePtr;
-				if(++totalCharCount == iFileSize) break;
-				continue;
-			}
-
-			// ROW DELIMITER
-			if(*fieldSavePtr == rowDelimiter) {
-
-				if((idFoundFlag == 1) && (groupFoundFlag == 1) && (numericFoundFlag == 1)) {
-
-					if(!strcmp(idCurrentString, idTempString)) {
-						// Aggregate value for each group
-						(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
-					}
-					else {
-
-						// 1 Print out current aggregates for id
-						tposeIOPrintGroupIdData(idCurrentString, tposeQuery);
-						// 2 Set new string as current id
-						strcpy(idCurrentString, idTempString); // Set current id to aggregate values for
-						// 3 Reset aggregates
-						memset((tposeQuery->aggregator)->aggregates, 0, ((tposeQuery->outputFile)->fileGroupHeader)->numFields * sizeof(double));
-						// 4 Aggregate value for new id 
-						(tposeQuery->aggregator)->aggregates[groupFieldIndex] += atof(numericTempString);
-
-					}
-
-				}
-					
-				// Reset flags for next row
-				idFoundFlag = 0;
-				groupFoundFlag = 0;
-				numericFoundFlag = 0;
-
-				fieldCount = 0;
-				++fieldSavePtr;
-				if(++totalCharCount == iFileSize) break;
-				continue;
-			}
-			
-			// GROUP FIELD
-			if(fieldCount == (tposeQuery->group))  { // if group value is empty string we ignore
-
-				// Get group field value
-				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
-					groupTempString[fieldCharCount++] = *fieldSavePtr++;
-					if(++totalCharCount == iFileSize) break;
-				}
-				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
-
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
-
-				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) != NULL) {
-					groupFoundFlag = 1; // Flag group field as found
-					groupFieldIndex = resultKey->dataOffset; // Is used to correctly order aggregates
-				}
-
-				// Reset variables
-				fieldCharCount = 0;
-				hashValue = 0;
-				
-				if(*fieldSavePtr == fieldDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-
-				if(*fieldSavePtr == rowDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-			}
-			
-			
-			// NUMERIC FIELD
-			if(fieldCount == (tposeQuery->numeric))  { // if group value is empty string we ignore
-
-				numericFoundFlag = 1; // Flag numeric field as found
-				
-				// Copy field value
-				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
-					numericTempString[fieldCharCount++] = *fieldSavePtr++;
-					if(++totalCharCount == iFileSize) break;
-				}
-				numericTempString[fieldCharCount] = '\0'; // Null-terminate string
-
-				// Reset variables
-				fieldCharCount = 0;
-
-				if(*fieldSavePtr == fieldDelimiter) {
-					--totalCharCount;
-					--fieldSavePtr;
-				}
-
-				if(*fieldSavePtr == rowDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-			}
-			
-			// ID FIELD
-			if(fieldCount == (tposeQuery->id))  { // if group value is empty string we ignore
-
-				idFoundFlag = 1; // Flag numeric field as found
-				
-				// Copy field value
-				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
-					idTempString[fieldCharCount++] = *fieldSavePtr++;
-					if(++totalCharCount == iFileSize) break;
-				}
-				idTempString[fieldCharCount] = '\0'; // Null-terminate string
-
-				if(firstId) {
-					strcpy(idCurrentString, idTempString); // Set current id to aggregate values for
-					firstId = 0;
-				}
-					
-				// Reset variables
-				fieldCharCount = 0;
-
-				if(*fieldSavePtr == fieldDelimiter) {
-					--totalCharCount;
-					--fieldSavePtr;
-				}
-
-				if(*fieldSavePtr == rowDelimiter) {
-					--fieldSavePtr;
-					--totalCharCount;
-				}
-			}
-
-			// If not a delimiter or the group field, then ++
-			++fieldSavePtr;
-			if(++totalCharCount == iFileSize) break;
-
-		}
-
-	} // End for-loop
-
-	// Print last line
-	tposeIOPrintGroupIdData(idCurrentString, tposeQuery);
-
-}
-
-
-
-/** 
  ** Iterates through unique groups and aggregates and formats output
  ** Used to output results from tposeIOTransposeGroup()
  **/
@@ -2234,15 +2323,38 @@ void tposeIOPrintOutput(
 			fprintf((tposeQuery->outputFile)->fd, "%s%c", ((tposeQuery->outputFile)->fileGroupHeader)->fields[i], fieldDelimiter);
 	}
 
-	// Aggregates
-	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
-		if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
-			fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], rowDelimiter);
-		else
-			fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], fieldDelimiter);
-	}
 
-	fflush((tposeQuery->outputFile)->fd);
+	// Aggregates
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_SUM) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], rowDelimiter);
+			else
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], fieldDelimiter);
+		}
+
+		fflush((tposeQuery->outputFile)->fd);
+	}
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->counts[i], rowDelimiter);
+			else
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->counts[i], fieldDelimiter);
+		}
+
+		fflush((tposeQuery->outputFile)->fd);
+	}
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_AVG) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->avgs[i], rowDelimiter);
+			else
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->avgs[i], fieldDelimiter);
+		}
+
+		fflush((tposeQuery->outputFile)->fd);
+	}
 
 }
 
@@ -2289,15 +2401,36 @@ void tposeIOPrintGroupIdData(
 	fprintf((tposeQuery->outputFile)->fd, "%s%c", id, fieldDelimiter);
 
 	// Aggregates
-	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
-		if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
-			fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], rowDelimiter);
-		else
-			fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], fieldDelimiter);
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_SUM) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], rowDelimiter);
+			else
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], fieldDelimiter);
+		}
+
+		fflush((tposeQuery->outputFile)->fd);
 	}
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->counts[i], rowDelimiter);
+			else
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->counts[i], fieldDelimiter);
+		}
 
-	fflush((tposeQuery->outputFile)->fd);
+		fflush((tposeQuery->outputFile)->fd);
+	}
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_AVG) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->avgs[i], rowDelimiter);
+			else
+				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->avgs[i], fieldDelimiter);
+		}
 
+		fflush((tposeQuery->outputFile)->fd);
+	}
 }
 
 
@@ -2349,15 +2482,37 @@ void tposeIOPrintGroupIdDataParallel(
 
 	// Id
 	fprintf(fd, "%s%c", id, fieldDelimiter);
-
+	
 	// Aggregates
-	for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
-		if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
-			fprintf(fd, "%.2f%c", aggregator->aggregates[i], rowDelimiter);
-		else
-			fprintf(fd, "%.2f%c", aggregator->aggregates[i], fieldDelimiter);
-	}
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_SUM) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf(fd, "%.2f%c", aggregator->aggregates[i], rowDelimiter);
+			else
+				fprintf(fd, "%.2f%c", aggregator->aggregates[i], fieldDelimiter);
+		}
 
-	fflush(fd);
+		fflush(fd);
+	}
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf(fd, "%.2f%c", aggregator->counts[i], rowDelimiter);
+			else
+				fprintf(fd, "%.2f%c", aggregator->counts[i], fieldDelimiter);
+		}
+
+		fflush(fd);
+	}
+	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_AVG) {
+		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
+			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
+				fprintf(fd, "%.2f%c", aggregator->avgs[i], rowDelimiter);
+			else
+				fprintf(fd, "%.2f%c", aggregator->avgs[i], fieldDelimiter);
+		}
+
+		fflush(fd);
+	}
 
 }
