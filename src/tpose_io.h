@@ -30,8 +30,10 @@
 
 
 	/**
-	 ** Implementation limits
+	 ** Implementation defs & limits
 	 **/
+	#define _FILE_OFFSET_BITS 64 // Enable long file access
+
 	#define TPOSE_IO_MAX_LINE 1048576
 	#define TPOSE_IO_MAX_FIELDS 5000
 	#define TPOSE_IO_MAX_FIELD_WIDTH 5000
@@ -40,9 +42,15 @@
 
 	#define TPOSE_IO_CHUNK_SIZE 1073741824
 
-	#define _FILE_OFFSET_BITS 64 // Enable long file access
+	#define TPOSE_IO_MODIFY_HEADER 1
+	#define TPOSE_IO_NO_MODIFY_HEADER 0
 
-	extern unsigned char rowDelimiter;
+
+
+	extern unsigned char rowDelimiter; // Defines row delimiter
+	extern char** prefixString;
+	extern char** suffixString;
+
 
 
 	/**
@@ -93,9 +101,9 @@
 		TposeInputFile* inputFile;
 		TposeOutputFile* outputFile;
 		TposeAggregator* aggregator;
-		unsigned int id;
-		unsigned int group;
-		unsigned int numeric;
+		int id;
+		int group;
+		int numeric;
 	} TposeQuery;
 
 
@@ -110,7 +118,7 @@
 
 
 	/* Output */
-	TposeOutputFile* tposeIOOpenOutputFile(char* filePath, unsigned char fieldDelimiter);
+	TposeOutputFile* tposeIOOpenOutputFile(char* filePath, const char* mode, unsigned char fieldDelimiter);
 	int tposeIOCloseOutputFile(TposeOutputFile* outputFile);
 
 	TposeOutputFile* tposeIOOutputFileAlloc(FILE* fd, unsigned char fieldDelimiter);
@@ -132,7 +140,7 @@
 	/* Util */
 	void tposeIOTransposeSimple(TposeQuery* tposeQuery);
 
-	void tposeIOgetUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
+	void tposeIOUniqueGroups(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOTransposeGroup(TposeQuery* tposeQuery, BTree* btree);
 	void tposeIOPrintOutput(TposeQuery* tposeQuery);
 
@@ -141,6 +149,58 @@
 	void tposeIOPrintGroupIdData(char* id, TposeQuery* tposeQuery);
 	int tposeIOGetFieldIndex(TposeHeader* tposeHeader, char* field); 
 	char* tposeIOLowerCase(char* string);
+
+
+/* parallel test start */
+	
+	#define TPOSE_IO_PARTITION_GROUP 0
+	#define TPOSE_IO_PARTITION_ID 1
+
+	BTree* btreeGlobal; // Needs to persist between computing unique groups, and aggregating values
+
+	typedef struct {
+		unsigned int threadId;
+		TposeQuery* query;
+		TposeHeader* header;
+	} TposeThreadData;
+
+	TposeThreadData** threadDataArray;
+	TposeThreadData* threadData;
+
+	typedef struct {
+		unsigned int threadId;
+		TposeQuery* query;
+		TposeAggregator* aggregator;
+	} TposeThreadAggregator;
+
+	TposeThreadAggregator** threadAggregatorArray;
+	TposeThreadAggregator* threadAggregator;
+
+	unsigned int fileChunks; // Number of file chunks
+	off_t partitions[1000];
+	
+	TposeOutputFile* tempFileArray[1000];
+
+
+	// functions
+	int tposeIOBuildPartitions(TposeQuery* tposeQuery, unsigned int mode);
+
+	void tposeIOUniqueGroupsParallel(TposeQuery* tposeQuery);
+	void* tposeIOUniqueGroupsMap(void* threadArg);
+	void tposeIOUniqueGroupsReduce(TposeQuery* tposeQuery);
+
+	void tposeIOTransposeGroupParallel(TposeQuery* tposeQuery);
+	void* tposeIOTransposeGroupMap(void* threadArg);
+	void tposeIOTransposeGroupReduce(TposeQuery* tposeQuery);
+
+	void tposeIOTransposeGroupIdParallel(TposeQuery* tposeQuery);
+	void* tposeIOTransposeGroupIdMap(void* threadArg);
+	void tposeIOTransposeGroupIdReduce(TposeQuery* tposeQuery);
+
+	void tposeIOPrintGroupIdHeaderParallel(TposeQuery* tposeQuery, unsigned int threadId);
+	void tposeIOPrintGroupIdDataParallel(char* id, TposeQuery* tposeQuery, TposeAggregator* aggregator, unsigned int threadId);
+/* parallel test end */
+
 
 
 #endif /* TPOSE_IO_H */

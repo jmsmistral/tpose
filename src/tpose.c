@@ -24,18 +24,18 @@
 
 
 /* Commandline Options */
-static const char* shortopts = "d:ip:s:a:hv";
+static const char* shortopts = "d:iPp:s:a:I:G:N:hv";
 static const struct option longopts[] = {
 	{"delimiter", required_argument, NULL, 'd'}
 	,{"indexed", no_argument, NULL, 'i'}
-	//,{"unbuffered", no_argument, NULL, 'u'}
+	,{"parallel", no_argument, NULL, 'P'}
 	,{"prefix", required_argument, NULL, 'p'}
 	,{"suffix", required_argument, NULL, 's'}
 	,{"aggregate", required_argument, NULL, 'a'}
 	//,{"keep", required_argument, NULL, 'k'}
-	,{"id", required_argument, NULL, 'x'}
-	,{"group", required_argument, NULL, 'y'}
-	,{"numeric", required_argument, NULL, 'z'}
+	,{"id", required_argument, NULL, 'I'}
+	,{"group", required_argument, NULL, 'G'}
+	,{"numeric", required_argument, NULL, 'N'}
 	,{"help", no_argument, NULL, 'h'}
 	,{"version", no_argument, NULL, 'v'}
 	,{NULL, 0, NULL, 0}
@@ -58,7 +58,7 @@ int main(
 
 	int delimiterFlag = 0;
 	int indexedFlag = 0;
-	//int unbufferedFlag = 0;
+	int parallelFlag = 0;
 	int prefixFlag = 0;
 	int suffixFlag = 0;
 	int aggregateFlag = 0;
@@ -100,9 +100,9 @@ int main(
 			case 'i':
 				indexedFlag = 1;
 				break;
-			/*case 'u':
-				unbufferedFlag = 1;
-				break;*/
+			case 'P':
+				parallelFlag = 1;
+				break;
 			case 'p':
 				prefixFlag = 1;
 				prefixArg = optarg;
@@ -119,15 +119,15 @@ int main(
 				keepFlag = 1;
 				keepArg = optarg;
 				break;*/
-			case 'x':
+			case 'I':
 				idFlag = 1;
 				idArg = strdup(optarg);
 				break;
-			case 'y':
+			case 'G':
 				groupFlag = 1;
 				groupArg = strdup(optarg);
 				break;
-			case 'z':
+			case 'N':
 				numericFlag = 1;
 				numericArg = strdup(optarg);
 				break;
@@ -144,10 +144,10 @@ int main(
 			case '?':
 				fprintf(stderr, "Missing option or argument.\n");
 				printHelp(1);
-				abort;
+				exit(EXIT_FAILURE);
 			default:
 				printHelp(1);
-				abort();
+				exit(EXIT_FAILURE);
 		}
 	}
 
@@ -162,7 +162,7 @@ int main(
 			else {
 				fprintf(stderr, "Too many files specified!\n");
 				printHelp(1);
-				abort();
+				exit(EXIT_FAILURE);
 			}
 			
 			++fileArg;
@@ -171,7 +171,7 @@ int main(
 	else {
 		fprintf(stderr, "Missing input file.\n");
 		printHelp(1);
-		abort();
+		exit(EXIT_FAILURE);
 	}
 
 
@@ -183,7 +183,7 @@ int main(
 
 		if (delimiterArg[0] != '\0' && delimiterArg[1] != '\0') {
 			fprintf(stderr, "The delimiter must be a single character\n");
-			abort();
+			exit(EXIT_FAILURE);
 		}
 
 		//fprintf(stdout, "A delimiter character has been specified\n");
@@ -192,7 +192,7 @@ int main(
 	}
 
 	if (!delimiterSpecified) {
-		//fprintf(stdout, "No field delimiter character specified, using TAB as default\n");
+		fprintf(stderr, "No field delimiter character specified, using TAB as default\n");
 		delimiter = '\t';
 	}
 
@@ -231,13 +231,13 @@ int main(
 	if(groupFlag && !numericFlag) {
 		fprintf(stderr, "NUMERIC field needs to be specified (see --numeric option)\n");
 		printHelp(1);
-		abort();
+		exit(EXIT_FAILURE);
 	}
 
 	if(idFlag && !groupFlag && !numericFlag) {
 		fprintf(stderr, "GROUP and NUMERIC fields need to be specified (see --group, and --numeric options)\n");
 		printHelp(1);
-		abort();
+		exit(EXIT_FAILURE);
 	}
 	
 	// Check output file (if empty, use stdout)
@@ -250,9 +250,15 @@ int main(
 		mutateHeader = 0; // Don't need to read header for simple transpose
 	
 
-	// Core
-	TposeInputFile* inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader);
-	TposeOutputFile* outputFile = tposeIOOpenOutputFile(outputFilePath, delimiter);
+	/* Core */
+	TposeInputFile* inputFile;
+	if((inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, TPOSE_IO_MODIFY_HEADER)) == NULL) {
+			exit(EXIT_FAILURE);
+	}
+	TposeOutputFile* outputFile;
+	if((outputFile = tposeIOOpenOutputFile(outputFilePath, "wa", delimiter)) == NULL) {
+			exit(EXIT_FAILURE);
+	}
 
 	// Create query
 	TposeQuery* tposeQuery;
@@ -279,18 +285,46 @@ int main(
 
 	// Transpose Group
 	if(groupFlag && numericFlag && !idFlag) {
-		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
-		tposeIOgetUniqueGroups(tposeQuery, btree);
-		tposeIOTransposeGroup(tposeQuery, btree);
-		btreeFree(&btree);
+		if((inputFile->fileSize >= TPOSE_IO_CHUNK_SIZE) && parallelFlag) {	
+			// Multi-threaded
+			btreeGlobal = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+			if(tposeIOBuildPartitions(tposeQuery, TPOSE_IO_PARTITION_GROUP) == -1) {
+				fprintf(stderr, "Error reading input file! Make sure it is correctly formed.\n");
+				exit(EXIT_FAILURE);
+			}
+			tposeIOUniqueGroupsParallel(tposeQuery);
+			tposeIOTransposeGroupParallel(tposeQuery);
+			btreeFree(&btreeGlobal);
+		}
+		else {
+			// Single-threaded
+			BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+			tposeIOUniqueGroups(tposeQuery, btree);
+			tposeIOTransposeGroup(tposeQuery, btree);
+			btreeFree(&btree);
+		}
 	}
 	
 	// Transpose Group Id
 	if(groupFlag && numericFlag && idFlag) {
-		BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
-		tposeIOgetUniqueGroups(tposeQuery, btree);
-		tposeIOTransposeGroupId(tposeQuery, btree);
-		btreeFree(&btree);
+		if((inputFile->fileSize >= TPOSE_IO_CHUNK_SIZE) && parallelFlag) {	
+			// Multi-threaded
+			btreeGlobal = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+			if(tposeIOBuildPartitions(tposeQuery, TPOSE_IO_PARTITION_ID) == -1) {
+				fprintf(stderr, "Error reading input file! Make sure it is correctly formed.\n");
+				exit(EXIT_FAILURE);
+			}
+			tposeIOUniqueGroupsParallel(tposeQuery);
+			tposeIOTransposeGroupIdParallel(tposeQuery);
+			btreeFree(&btreeGlobal);
+		}
+		else {
+			// Single-threaded
+			BTree* btree = btreeAlloc(); // Needs to persist between computing unique groups, and aggregating values
+			tposeIOUniqueGroups(tposeQuery, btree);
+			tposeIOTransposeGroupId(tposeQuery, btree);
+			btreeFree(&btree);
+		}
 	}
 	
 	//Clean-up
@@ -314,8 +348,11 @@ static void printHelp
   fprintf(out, "\n\
 Usage: %s input-file [output-file] [--options] \n\n", program_name);
 
-  fprintf(out, "  -d<string>, --delimiter=<string>\n\
+  fprintf(out, "  -d<character>, --delimiter=<character>\n\
 \t\tspecify field delimiter used to read input file\n");
+  fprintf(out, "  -P, --parallel\n\
+\t\tattempts to transpose the data over mulitple threads.\n\
+\t\tThis only applies for files larger than 1GB\n");
   fprintf(out, "  -i, --indexed\n\
 \t\tuse field indexes (e.g. 1,2,...,<max-fields>) \
 to match fields, instead of field names\n");
@@ -326,14 +363,14 @@ to match fields, instead of field names\n");
   fprintf(out, "  -a<type>, --aggregate=<type>\n\
 \t\taggregates numeric values according to <aggregate-type> passed.\n\
 \t\tcan be either 'SUM', 'COUNT', or 'AVG' (Default = 'SUM')\n\
-\t\t(note: requires --numeric to be specified\n");
-  fprintf(out, "  --id=<field-name>\n\
-\t\tdefines ID field in input file (note: requires both --group, and --numeric\n");
-  fprintf(out, "  --group=<field-name>\n\
+\t\t(requires --numeric to be specified\n");
+  fprintf(out, "  -I<field-name>, --id=<field-name>\n\
+\t\tdefines ID field in input file (requires both --group, and --numeric\n");
+  fprintf(out, "  -G<field-name>, --group=<field-name>\n\
 \t\tdefines GROUP field in input file.\n\
 \t\tThis field stores he group values to transpose\n\
-\t\tthe NUMERIC field values over (note: requires --numeric)\n");
-  fprintf(out, "  --numeric=<field-name>\n\
+\t\tthe NUMERIC field values over (requires --numeric)\n");
+  fprintf(out, "  -N<field-name>, --numeric=<field-name>\n\
 \t\tdefines NUMERIC field in input file. This field holds the\n\
 \t\tnumeric values to be transposed. These values will be\n\
 \t\taggregated according to the --aggregate option\n");

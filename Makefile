@@ -10,7 +10,7 @@ else
 endif
 
 gcc = $(compiler)
-flags = #-DTPOSE_DEBUG=1
+flags = -lpthread #-DTPOSE_DEBUG=1
 
 PREFIX = /usr/local
 
