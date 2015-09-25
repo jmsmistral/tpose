@@ -222,6 +222,11 @@ TposeHeader* tposeIOHeaderAlloc(
 
 	tposeHeader->maxFields = maxFields;
 	tposeHeader->numFields = 0;
+
+	if(tposeHeader->maxFields == 0) {
+		fprintf(stderr, "Error: Possibly wrong delimiter specified!\n");
+		exit(EXIT_FAILURE);
+	}
 	
 	assert(tposeHeader->maxFields != 0);
 	assert(tposeHeader->numFields == 0);
@@ -448,7 +453,7 @@ TposeQuery* tposeIOQueryIndexedAlloc(
 	if(numericVar != -1) tposeQuery->numeric = numericVar;
 	if(aggregateType != NULL) {
 		if(!strcmp("sum", tposeIOLowerCase(aggregateType)))
-			tposeQuery->aggregateType = 0; //TPOSE_IO_AGGREGATION_SUM;
+			tposeQuery->aggregateType = TPOSE_IO_AGGREGATION_SUM;
 
 		if(!strcmp("count", tposeIOLowerCase(aggregateType)))
 			tposeQuery->aggregateType = TPOSE_IO_AGGREGATION_COUNT;

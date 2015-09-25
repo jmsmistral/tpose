@@ -243,6 +243,9 @@ int main(
 			exit(EXIT_FAILURE);
 		}
 	}
+	else
+		aggregateArg = strdup("sum"); // Default
+		
 
 
 	// Check that option dependencies have been specified
