@@ -391,8 +391,6 @@ TposeQuery* tposeIOQueryAlloc(
 	debug_print("tposeIOQueryAlloc(): id = %d\n", tposeQuery->id);
 	debug_print("tposeIOQueryAlloc(): group = %d\n", tposeQuery->group);
 	debug_print("tposeIOQueryAlloc(): numeric = %d\n", tposeQuery->numeric);
-	//printf("tposeIOQueryAlloc(): aggregateType = %s\n", aggregateType);
-	//printf("tposeIOQueryAlloc(): aggregateType = %u\n", tposeQuery->aggregateType);
 	assert(tposeQuery->aggregateType >= TPOSE_IO_AGGREGATION_SUM && tposeQuery->aggregateType <= TPOSE_IO_AGGREGATION_AVG);
 
 	return tposeQuery;
@@ -458,8 +456,6 @@ TposeQuery* tposeIOQueryIndexedAlloc(
 		if(!strcmp("avg", tposeIOLowerCase(aggregateType)))
 			tposeQuery->aggregateType = TPOSE_IO_AGGREGATION_AVG;
 	}
-	//printf("tposeIOQueryAlloc(): aggregateType = %s\n", aggregateType);
-	//printf("tposeIOQueryAlloc(): aggregateType = %u\n", tposeQuery->aggregateType);
 	assert(tposeQuery->aggregateType >= TPOSE_IO_AGGREGATION_SUM && tposeQuery->aggregateType <= TPOSE_IO_AGGREGATION_AVG);
 
 	return tposeQuery;
@@ -921,6 +917,7 @@ void tposeIOTransposeGroup(
 	,BTree* btree
 ) {
 
+
 	// Flags & static vars
 	unsigned char fieldDelimiter = (tposeQuery->inputFile)->fieldDelimiter;
 	unsigned int groupFoundFlag = 0; // 1 when we find the group field, 0 otherwise (0 if there is no group value)
@@ -1005,7 +1002,7 @@ void tposeIOTransposeGroup(
 				// Get group field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
 					groupTempString[fieldCharCount++] = *fieldSavePtr++;
-					++totalCharCount;
+					if(++totalCharCount == iFileSize) break;
 				}
 				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
 
@@ -1067,7 +1064,7 @@ void tposeIOTransposeGroup(
 		}
 
 	} // End for-loop
-// NIGGA1
+	
 	// Calculate averges
 	int ctr;
 	for(ctr = 0; ctr < ((tposeQuery->outputFile)->fileGroupHeader)->numFields; ++ctr)

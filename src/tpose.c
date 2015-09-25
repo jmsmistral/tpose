@@ -299,7 +299,6 @@ int main(
 	if(!groupFlag && !numericFlag && !idFlag) {
 		tposeIOTransposeSimple(tposeQuery);
 	}
-
 	// Transpose Group
 	if(groupFlag && numericFlag && !idFlag) {
 		if((inputFile->fileSize >= TPOSE_IO_CHUNK_SIZE) && parallelFlag) {	
