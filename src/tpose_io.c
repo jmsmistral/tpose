@@ -2338,9 +2338,9 @@ void tposeIOPrintOutput(
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
 			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
-				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->counts[i], rowDelimiter);
+				fprintf((tposeQuery->outputFile)->fd, "%d%c", (int) (tposeQuery->aggregator)->counts[i], rowDelimiter);
 			else
-				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->counts[i], fieldDelimiter);
+				fprintf((tposeQuery->outputFile)->fd, "%d%c", (int) (tposeQuery->aggregator)->counts[i], fieldDelimiter);
 		}
 
 		fflush((tposeQuery->outputFile)->fd);
@@ -2414,9 +2414,9 @@ void tposeIOPrintGroupIdData(
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
 			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
-				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->counts[i], rowDelimiter);
+				fprintf((tposeQuery->outputFile)->fd, "%d%c", (int) (tposeQuery->aggregator)->counts[i], rowDelimiter);
 			else
-				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->counts[i], fieldDelimiter);
+				fprintf((tposeQuery->outputFile)->fd, "%d%c", (int) (tposeQuery->aggregator)->counts[i], fieldDelimiter);
 		}
 
 		fflush((tposeQuery->outputFile)->fd);
@@ -2497,9 +2497,9 @@ void tposeIOPrintGroupIdDataParallel(
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
 			if(i == ((tposeQuery->outputFile)->fileGroupHeader)->numFields - 1)
-				fprintf(fd, "%.2f%c", aggregator->counts[i], rowDelimiter);
+				fprintf(fd, "%d%c", (int) aggregator->counts[i], rowDelimiter);
 			else
-				fprintf(fd, "%.2f%c", aggregator->counts[i], fieldDelimiter);
+				fprintf(fd, "%d%c", (int) aggregator->counts[i], fieldDelimiter);
 		}
 
 		fflush(fd);
