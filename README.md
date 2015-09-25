@@ -33,7 +33,7 @@ Get more details on the different options by running:
 $ tpose --help
 ```
 
-** Simple transpose **
+* ** Simple transpose **
 ```
 #!bash
 
@@ -52,7 +52,7 @@ US	3	1	2	3
 
 ```
 
-** Transpose over GROUP field **
+* ** Transpose over GROUP field **
 ```
 #!bash
 
@@ -72,7 +72,7 @@ rev_A	rev_B	rev_C
 13.00	12.00	15.00
 ```
 
-** Transpose over GROUP and ID field **
+* ** Transpose over GROUP and ID field **
 ```
 #!bash
 
@@ -93,4 +93,79 @@ customer_id	rev_A	rev_B	rev_C
 2	0.00	0.00	6.00
 3	0.00	9.00	9.00
 4	11.00	0.00	0.00
+```
+
+* ** Field indexes instead of names **
+Use the -i or --indexed option.
+```
+#!bash
+
+$ cat data_ex2_group.txt
+Customer_id	Revenue_group	Amount
+1	rev_A	2
+1	rev_B	3
+2	rev_C	6
+3	rev_B	7
+3	rev_B	2
+3	rev_C	9
+4	rev_A	8
+4	rev_A	3
+
+$ tpose data_ex2_group.txt -i -I1 -G2 -N3
+customer_id	rev_A	rev_B	rev_C
+1	2.00	3.00	0.00
+2	0.00	0.00	6.00
+3	0.00	9.00	9.00
+4	11.00	0.00	0.00
+```
+
+* ** Different types of aggregation **
+Use the -a or --aggregate option followed by 'sum' (default), 'count', or 'avg'.
+
+* COUNT
+Counts group field instances instead of summing the NUMERICAL field values. 
+```
+#!bash
+
+$ cat data_ex2_group.txt
+Customer_id	Revenue_group	Amount
+1	rev_A	2
+1	rev_B	3
+2	rev_C	6
+3	rev_B	7
+3	rev_B	2
+3	rev_C	9
+4	rev_A	8
+4	rev_A	3
+
+$ tpose data_ex2_group.txt -i -I1 -G2 -N3 -acount
+customer_id	rev_A	rev_B	rev_C
+1	1	1	0
+2	0	0	1
+3	0	2	1
+4	2	0	0
+```
+
+* AVG
+Divides the sum of the NUMERICAL field values by the count of GROUP field instances (division by zero result in 'Not-A-Number' or nans)
+```
+#!bash
+
+$ cat data_ex2_group.txt
+Customer_id	Revenue_group	Amount
+1	rev_A	2
+1	rev_B	3
+2	rev_C	6
+3	rev_B	7
+3	rev_B	2
+3	rev_C	9
+4	rev_A	8
+4	rev_A	3
+
+$ tpose data_ex2_group.txt -i -I1 -G2 -N3 -aavg
+customer_id	rev_A	rev_B	rev_C
+1	2.00	3.00	nan
+2	nan	nan	6.00
+3	nan	4.50	9.00
+4	5.50	nan	nan
 ```
