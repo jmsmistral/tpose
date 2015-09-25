@@ -230,3 +230,9 @@ customer_id	xxx_rev_A_yyy	xxx_rev_B_yyy	xxx_rev_C_yyy
 3	0.00	9.00	9.00
 4	11.00	0.00	0.00
 ```
+
+## Bug reports ##
+If you have any bug reports or feature requests, please email me at: jmsmistral@gmail.com, with "TPOSE BUG" or "TPOSE FEATURE" somewhere in the subject. 
+Alternatively, submit a pull-request.
+
+Remember, tpose is free software (licensed under GPLv3)!
