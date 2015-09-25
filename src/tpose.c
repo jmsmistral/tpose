@@ -270,7 +270,7 @@ int main(
 
 	/* Core */
 	TposeInputFile* inputFile;
-	if((inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, TPOSE_IO_MODIFY_HEADER)) == NULL) {
+	if((inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader)) == NULL) {
 			exit(EXIT_FAILURE);
 	}
 	TposeOutputFile* outputFile;
