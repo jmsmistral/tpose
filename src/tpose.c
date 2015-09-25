@@ -193,7 +193,7 @@ int main(
 	}
 
 	if (!delimiterSpecified) {
-		fprintf(stderr, "No field delimiter character specified, using TAB as default\n");
+		//fprintf(stderr, "No field delimiter character specified, using TAB as default\n");
 		delimiter = '\t';
 	}
 
