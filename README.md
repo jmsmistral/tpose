@@ -185,6 +185,7 @@ $ ls -l output_tpose.txt
 ```
 
 #### Changing delimiter ####
+Use the -d or --delimiter option.
 ```
 #!bash
 
@@ -232,7 +233,7 @@ customer_id	xxx_rev_A_yyy	xxx_rev_B_yyy	xxx_rev_C_yyy
 ```
 
 ## Bug reports ##
-If you have any bug reports or feature requests, please email me at: jmsmistral@gmail.com, with "TPOSE BUG" or "TPOSE FEATURE" somewhere in the subject. 
+If you have any bug reports or feature requests, please email me at: **jmsmistral@gmail.com**, with "TPOSE BUG" or "TPOSE FEATURE" somewhere in the subject. 
 Alternatively, submit a pull-request.
 
 Remember, tpose is free software (licensed under GPLv3)!
