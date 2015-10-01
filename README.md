@@ -37,35 +37,34 @@ $ tpose --help
 ```
 #!bash
 
-$ cat data_ex1_simple.txt
-Quarter	Europe	Asia	US
-Q1	2	5	3
-Q2	3	4	1
-Q3	3	5	2
-Q4	4	6	3
+$ cat data_ex1_simple.txt | column -s$'\t' -t
+Quarter  Europe  Asia  US
+Q1       2       5     3
+Q2       3       4     1
+Q3       3       5     2
+Q4       4       6     3
 
 $ tpose data_ex1_simple.txt
-Quarter	Q1	Q2	Q3	Q4
-Europe	2	3	3	4
-Asia	5	4	5	6
-US	3	1	2	3
-
+Quarter  Q1  Q2  Q3  Q4
+Europe   2   3   3   4
+Asia     5   4   5   6
+US       3   1   2   3
 ```
 
 #### Transpose over GROUP field ####
 ```
 #!bash
 
-$ cat data_ex2_group.txt
-Customer_id	Revenue_group	Amount
-1	rev_A	2
-1	rev_B	3
-2	rev_C	6
-3	rev_B	7
-3	rev_B	2
-3	rev_C	9
-4	rev_A	8
-4	rev_A	3
+$ cat data_ex2_group.txt | column -s$'\t' -t
+Customer_id  Revenue_group  Amount
+1            rev_A          2
+1            rev_B          3
+2            rev_C          6
+3            rev_B          7
+3            rev_B          2
+3            rev_C          9
+4            rev_A          8
+4            rev_A          3
 
 $ tpose data_ex2_group.txt -Grevenue_group -Namount
 rev_A	rev_B	rev_C
@@ -76,23 +75,23 @@ rev_A	rev_B	rev_C
 ```
 #!bash
 
-$ cat data_ex2_group.txt
-Customer_id	Revenue_group	Amount
-1	rev_A	2
-1	rev_B	3
-2	rev_C	6
-3	rev_B	7
-3	rev_B	2
-3	rev_C	9
-4	rev_A	8
-4	rev_A	3
+$ cat data_ex2_group.txt | column -s$'\t' -t
+Customer_id  Revenue_group  Amount
+1            rev_A          2
+1            rev_B          3
+2            rev_C          6
+3            rev_B          7
+3            rev_B          2
+3            rev_C          9
+4            rev_A          8
+4            rev_A          3
 
 $ tpose data_ex2_group.txt -Icustomer_id -Grevenue_group -Namount
-customer_id	rev_A	rev_B	rev_C
-1	2.00	3.00	0.00
-2	0.00	0.00	6.00
-3	0.00	9.00	9.00
-4	11.00	0.00	0.00
+customer_id  rev_A  rev_B  rev_C
+1            2.00   3.00   0.00
+2            0.00   0.00   6.00
+3            0.00   9.00   9.00
+4            11.00  0.00   0.00
 ```
 
 #### Field indexes instead of names ####
@@ -100,23 +99,23 @@ Use the -i or --indexed option.
 ```
 #!bash
 
-$ cat data_ex2_group.txt
-Customer_id	Revenue_group	Amount
-1	rev_A	2
-1	rev_B	3
-2	rev_C	6
-3	rev_B	7
-3	rev_B	2
-3	rev_C	9
-4	rev_A	8
-4	rev_A	3
+$ cat data_ex2_group.txt | column -s$'\t' -t
+Customer_id  Revenue_group  Amount
+1            rev_A          2
+1            rev_B          3
+2            rev_C          6
+3            rev_B          7
+3            rev_B          2
+3            rev_C          9
+4            rev_A          8
+4            rev_A          3
 
 $ tpose data_ex2_group.txt -i -I1 -G2 -N3
-customer_id	rev_A	rev_B	rev_C
-1	2.00	3.00	0.00
-2	0.00	0.00	6.00
-3	0.00	9.00	9.00
-4	11.00	0.00	0.00
+customer_id  rev_A  rev_B  rev_C
+1            2.00   3.00   0.00
+2            0.00   0.00   6.00
+3            0.00   9.00   9.00
+4            11.00  0.00   0.00
 ```
 
 #### Different types of aggregation ####
@@ -127,23 +126,23 @@ Counts group field instances instead of summing the NUMERICAL field values.
 ```
 #!bash
 
-$ cat data_ex2_group.txt
-Customer_id	Revenue_group	Amount
-1	rev_A	2
-1	rev_B	3
-2	rev_C	6
-3	rev_B	7
-3	rev_B	2
-3	rev_C	9
-4	rev_A	8
-4	rev_A	3
+$ cat data_ex2_group.txt | column -s$'\t' -t
+Customer_id  Revenue_group  Amount
+1            rev_A          2
+1            rev_B          3
+2            rev_C          6
+3            rev_B          7
+3            rev_B          2
+3            rev_C          9
+4            rev_A          8
+4            rev_A          3
 
 $ tpose data_ex2_group.txt -i -I1 -G2 -N3 -acount
-customer_id	rev_A	rev_B	rev_C
-1	1	1	0
-2	0	0	1
-3	0	2	1
-4	2	0	0
+customer_id  rev_A  rev_B  rev_C
+1            1      1      0
+2            0      0      1
+3            0      2      1
+4            2      0      0
 ```
 
 * AVG
@@ -151,23 +150,23 @@ Divides the sum of the NUMERICAL field values by the count of GROUP field instan
 ```
 #!bash
 
-$ cat data_ex2_group.txt
-Customer_id	Revenue_group	Amount
-1	rev_A	2
-1	rev_B	3
-2	rev_C	6
-3	rev_B	7
-3	rev_B	2
-3	rev_C	9
-4	rev_A	8
-4	rev_A	3
+$ cat data_ex2_group.txt | column -s$'\t' -t
+Customer_id  Revenue_group  Amount
+1            rev_A          2
+1            rev_B          3
+2            rev_C          6
+3            rev_B          7
+3            rev_B          2
+3            rev_C          9
+4            rev_A          8
+4            rev_A          3
 
 $ tpose data_ex2_group.txt -i -I1 -G2 -N3 -aavg
-customer_id	rev_A	rev_B	rev_C
-1	2.00	3.00	nan
-2	nan	nan	6.00
-3	nan	4.50	9.00
-4	5.50	nan	nan
+customer_id  rev_A  rev_B  rev_C
+1            2.00   3.00   -nan
+2            -nan   -nan   6.00
+3            -nan   4.50   9.00
+4            5.50   -nan   -nan
 ```
 
 #### Parallel execution ####
@@ -213,23 +212,23 @@ Use the -p (or --prefix), and -s (or --suffix) option.
 ```
 #!bash
 
-$ cat data_ex2_group.txt
-Customer_id	Revenue_group	Amount
-1	rev_A	2
-1	rev_B	3
-2	rev_C	6
-3	rev_B	7
-3	rev_B	2
-3	rev_C	9
-4	rev_A	8
-4	rev_A	3
+$ cat data_ex2_group.txt | column -s$'\t' -t
+Customer_id  Revenue_group  Amount
+1            rev_A          2
+1            rev_B          3
+2            rev_C          6
+3            rev_B          7
+3            rev_B          2
+3            rev_C          9
+4            rev_A          8
+4            rev_A          3
 
 $ tpose data_ex2_group.txt -i -I1 -G2 -N3 -pxxx_ -syyy_
-customer_id	xxx_rev_A_yyy	xxx_rev_B_yyy	xxx_rev_C_yyy
-1	2.00	3.00	0.00
-2	0.00	0.00	6.00
-3	0.00	9.00	9.00
-4	11.00	0.00	0.00
+customer_id  xxx_rev_A_yyy  xxx_rev_B_yyy  xxx_rev_C_yyy
+1            2.00           3.00           0.00
+2            0.00           0.00           6.00
+3            0.00           9.00           9.00
+4            11.00          0.00           0.00
 ```
 
 ## Bug reports ##
