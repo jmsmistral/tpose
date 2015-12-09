@@ -1330,20 +1330,19 @@ int tposeIOBuildPartitions(
 	int reverseCtr = 0;
 	prepartitions[0] = fileSize;
 
-
 	while(rFileSize >= TPOSE_IO_CHUNK_SIZE){
 		rFileSize -= TPOSE_IO_CHUNK_SIZE;
-		prepartitions[fileChunks++] = rFileSize;
+		prepartitions[++fileChunks] = rFileSize;
 	}
-	prepartitions[fileChunks] = 0; // First partition starts at byte 0
+	prepartitions[++fileChunks] = 0; // First partition starts at byte 0
 	
 	// Reverse partitions to ease processing
 	for(threadCtr=fileChunks; threadCtr>=0; threadCtr--) {
 		partitions[reverseCtr++]=prepartitions[threadCtr];
 	}
 
-
 	// Correct partitions to start after new lines
+	// when transposing over a group field only
 	char* partSavePtr;
 	off_t offset;
 	if(mode == TPOSE_IO_PARTITION_GROUP) {
@@ -1362,6 +1361,7 @@ int tposeIOBuildPartitions(
 	}
 	// Partition file into chunks with mutually excluse set
 	// of IDs (avoids more complex post-processing 'shuffle')
+	// when transposing over id and group fields
 	else if(mode == TPOSE_IO_PARTITION_ID) { 
 
 		off_t partitionStart;
@@ -1491,12 +1491,12 @@ int tposeIOBuildPartitions(
 		return -1;
 	}
 
-	// Print updated partitions
-	debug_print("File chunks = %d\n", fileChunks);
+	// Print updated partitions for debugging
+	/*debug_print("File chunks = %d\n", fileChunks);
 	debug_print("Final file partitions...\n");
-	for(reverseCtr=0; reverseCtr<fileChunks; reverseCtr++) {
-		debug_print("partitions[%u] = %u\n", reverseCtr, partitions[reverseCtr]);
-	}
+	for(reverseCtr=0; reverseCtr<=fileChunks; reverseCtr++) {
+		debug_print("partitions[%u] = %lu\n", reverseCtr, partitions[reverseCtr]);
+	}*/
 
 	return 0;
 
