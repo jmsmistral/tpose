@@ -1,4 +1,4 @@
-# Welcome to tpose home! #
+# Welcome to tpose! #
 
 tpose is a UNIX-based terminal program for transposing delimited text-files.
 
@@ -10,9 +10,7 @@ Read this article ([medium](https://medium.com/@jmsmistral/on-transposing-data-8
 
 Most of you will just need to download or clone the source code and do:
 
-```
-#!bash
-
+```bash
 $ cd tpose
 $ make && sudo make install
 ```
@@ -21,22 +19,16 @@ In case you get issues, check [here](https://bitbucket.org/jmsmistral/tpose/wiki
 ## Running tpose ##
 
 tpose usage pattern:
-```
-#!bash
-
+```bash
 tpose input-file [output-file] [-IGNdiapsPhv]
 ```
 Get more details on the different options by running:
-```
-#!bash
-
+```bash
 $ tpose --help
 ```
 
 #### Simple transpose ####
-```
-#!bash
-
+```bash
 $ cat data_ex1_simple.txt | column -s$'\t' -t
 Quarter  Europe  Asia  US
 Q1       2       5     3
@@ -52,9 +44,7 @@ US       3   1   2   3
 ```
 
 #### Transpose over GROUP field ####
-```
-#!bash
-
+```bash
 $ cat data_ex2_group.txt | column -s$'\t' -t
 Customer_id  Revenue_group  Amount
 1            rev_A          2
@@ -72,9 +62,7 @@ rev_A	rev_B	rev_C
 ```
 
 #### Transpose over GROUP and ID field ####
-```
-#!bash
-
+```bash
 $ cat data_ex2_group.txt | column -s$'\t' -t
 Customer_id  Revenue_group  Amount
 1            rev_A          2
@@ -96,9 +84,7 @@ customer_id  rev_A  rev_B  rev_C
 
 #### Field indexes instead of names ####
 Use the -i or --indexed option.
-```
-#!bash
-
+```bash
 $ cat data_ex2_group.txt | column -s$'\t' -t
 Customer_id  Revenue_group  Amount
 1            rev_A          2
@@ -123,9 +109,7 @@ Use the -a or --aggregate option followed by 'sum' (default), 'count', or 'avg'.
 
 * COUNT
 Counts group field instances instead of summing the NUMERICAL field values. 
-```
-#!bash
-
+```bash
 $ cat data_ex2_group.txt | column -s$'\t' -t
 Customer_id  Revenue_group  Amount
 1            rev_A          2
@@ -147,9 +131,7 @@ customer_id  rev_A  rev_B  rev_C
 
 * AVG
 Divides the sum of the NUMERICAL field values by the count of GROUP field instances (division by zero result in 'Not-A-Number' or nans)
-```
-#!bash
-
+```bash
 $ cat data_ex2_group.txt | column -s$'\t' -t
 Customer_id  Revenue_group  Amount
 1            rev_A          2
@@ -171,9 +153,7 @@ customer_id  rev_A  rev_B  rev_C
 
 #### Parallel execution ####
 Use the -P or --parallel option (only works for files >1GB). This example prints to an output file instead of the screen.
-```
-#!bash
-
+```bash
 $ ls -l data_large.txt
 -rw-r--r--  1 jonathan  staff    14G 25 Sep 21:28 data_large.txt
 
@@ -185,9 +165,7 @@ $ ls -l output_tpose.txt
 
 #### Changing delimiter ####
 Use the -d or --delimiter option.
-```
-#!bash
-
+```bash
 $ cat data.csv
 Customer_id,Revenue_group,Amount
 1,rev_A,2
@@ -209,9 +187,7 @@ customer_id,rev_A,rev_B,rev_C
 
 #### Add a prefix/suffix to output field names ####
 Use the -p (or --prefix), and -s (or --suffix) option.
-```
-#!bash
-
+```bash
 $ cat data_ex2_group.txt | column -s$'\t' -t
 Customer_id  Revenue_group  Amount
 1            rev_A          2
@@ -231,8 +207,5 @@ customer_id  xxx_rev_A_yyy  xxx_rev_B_yyy  xxx_rev_C_yyy
 4            11.00          0.00           0.00
 ```
 
-## Bug reports ##
-If you have any bug reports or feature requests, please email me at: **jmsmistral@gmail.com**, with "TPOSE BUG" or "TPOSE FEATURE" somewhere in the subject. 
-Alternatively, submit a pull-request.
-
 Remember, tpose is free software (licensed under GPLv3)!
+
