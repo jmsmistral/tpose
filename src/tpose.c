@@ -19,6 +19,7 @@
 #include "system.h"
 #include "util.h"
 #include "tpose.h"
+#include <signal.h>
 #include "tpose_io.h"
 
 
@@ -63,6 +64,9 @@ int main(
 
 	set_program_name(argv[0]);
 	atexit(close_stdout);
+	/* Report broken pipes and file-size limits through checked stdio errors. */
+	signal(SIGPIPE, SIG_IGN);
+	signal(SIGXFSZ, SIG_IGN);
 
 	int delimiterFlag = 0;
 	int indexedFlag = 0;
@@ -206,19 +210,19 @@ int main(
  	}
 	else {
 		
-		if( idFlag && ((idIndexedArg = stringToInteger(idArg)) == -1)) {
+		if( idFlag && ((idIndexedArg = stringToInteger(idArg)) <= 0)) {
 			fprintf(stderr, "--indexed option requires a positive integer value for id field\n");
 			printHelp(1);
 			exit(EXIT_FAILURE);
 		}
 
-		if( groupFlag && ((groupIndexedArg = stringToInteger(groupArg)) == -1)) {
+		if( groupFlag && ((groupIndexedArg = stringToInteger(groupArg)) <= 0)) {
 			fprintf(stderr, "--indexed option requires a positive integer value for group field\n");
 			printHelp(1);
 			exit(EXIT_FAILURE);
 		}
 
-		if( numericFlag && ((numericIndexedArg = stringToInteger(numericArg)) == -1)) {
+		if( numericFlag && ((numericIndexedArg = stringToInteger(numericArg)) <= 0)) {
 			fprintf(stderr, "--indexed option requires a postive integer value for numeric option\n");
 			printHelp(1);
 			exit(EXIT_FAILURE);
@@ -255,7 +259,7 @@ int main(
 		exit(EXIT_FAILURE);
 	}
 
-	if(idFlag && !groupFlag && !numericFlag) {
+	if((idFlag && (!groupFlag || !numericFlag)) || (numericFlag && !groupFlag) || (aggregateFlag && !numericFlag)) {
 		fprintf(stderr, "GROUP and NUMERIC fields need to be specified (see --group, and --numeric options)\n");
 		printHelp(1);
 		exit(EXIT_FAILURE);
@@ -276,10 +280,7 @@ int main(
 	if((inputFile = tposeIOOpenInputFile(inputFilePath, delimiter, mutateHeader)) == NULL) {
 			exit(EXIT_FAILURE);
 	}
-	TposeOutputFile* outputFile;
-	if((outputFile = tposeIOOpenOutputFile(outputFilePath, "wa", delimiter)) == NULL) {
-			exit(EXIT_FAILURE);
-	}
+	TposeOutputFile* outputFile = NULL; // Validate the query before creating output.
 
 	// Create query
 	TposeQuery* tposeQuery;
@@ -297,6 +298,10 @@ int main(
 			exit(EXIT_FAILURE);
 		}
 	}
+
+	outputFile = tposeIOOpenDestination(inputFile, outputFilePath, delimiter);
+	if(!outputFile) exit(EXIT_FAILURE);
+	tposeQuery->outputFile = outputFile;
 
 	// Transpose Simple
 	if(!groupFlag && !numericFlag && !idFlag) {
@@ -346,12 +351,12 @@ int main(
 		}
 	}
 	
-	//Clean-up
-	tposeIOCloseInputFile(inputFile);
-	tposeIOCloseOutputFile(outputFile);
+	// Publish only after computation and input cleanup have succeeded.
 	tposeIOQueryFree(&tposeQuery);
-	
-	exit(EXIT_SUCCESS);
+	int failed = tposeIOCloseInputFile(inputFile) != 0;
+	if(!failed) failed = tposeIOCommitOutput(outputFile) != 0;
+	tposeIOOutputFileFree(&outputFile);
+	exit(failed ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 
@@ -393,7 +398,7 @@ Usage: %s input-file [output-file] [--options] \n\n", program_name);
 
   printContact(status);
 
-  fclose(out);
+  /* close_stdout owns the standard streams at process exit. */
   exit(status);
 
 }

@@ -342,6 +342,7 @@ TposeOutputFile* tposeIOOutputFileAlloc(
 	outputFile->fieldDelimiter = fieldDelimiter;
 	outputFile->fileIdHeader = NULL;
 	outputFile->fileGroupHeader = NULL;
+	outputFile->transaction = NULL;
 	
 	assert(outputFile->fd != NULL);
 
@@ -357,6 +358,7 @@ TposeOutputFile* tposeIOOutputFileAlloc(
 void tposeIOOutputFileFree(
     TposeOutputFile** outputFilePtr
 ) {
+	tposeIODiscardOutput(*outputFilePtr);
 
 	if( (*outputFilePtr)->fileIdHeader != NULL)
 		tposeIOHeaderFree(&((*outputFilePtr)->fileIdHeader));
@@ -781,18 +783,29 @@ int tposeIOCloseOutputFile(
 	TposeOutputFile* outputFile
 ) {
 	
-	// Close if not standard output
-	if(outputFile->fd != stdout) {  
-		if(ferror(outputFile->fd))
-			fprintf(stderr, "Error: Output file closed with errors - check data (Error number = %d - %s)\n", errno, strerror(errno));
-		fclose(outputFile->fd);
+	int failed = 0;
+	if(outputFile->fd) {
+		failed = ferror(outputFile->fd) != 0;
+		if(fflush(outputFile->fd) != 0) failed = 1;
+		if(outputFile->fd != stdout && fclose(outputFile->fd) != 0) failed = 1;
 	}
+	outputFile->fd = NULL;
+	if(failed) fprintf(stderr, "Error: Cannot flush or close output stream\n");
 
 	// Free TposeOutputFile memory
 	tposeIOOutputFileFree(&outputFile);
 
-	return 0;
+	return failed ? -1 : 0;
 
+}
+
+void tposeIOFlushOutput(FILE* stream) {
+    int failed = ferror(stream) != 0;
+    if(fflush(stream) != 0) failed = 1;
+    if(failed) {
+        fprintf(stderr, "Error: Cannot write output stream\n");
+        exit(EXIT_FAILURE);
+    }
 }
 
 
@@ -972,7 +985,7 @@ int tposeIOBuildPartitions(TposeQuery* query, unsigned int mode) {
             off_t boundary = cursor - data;
             if(boundary == length) break;
             if(boundary > partitions[fileChunks]) {
-                /* Reserve the final endpoint; ID output has 100 temporary slots. */
+                /* Retain the current partition limits, reserving the final endpoint. */
                 unsigned int maxChunks = mode == TPOSE_IO_PARTITION_ID ? 100 : 999;
                 if(fileChunks + 1 >= maxChunks) {
                     fprintf(stderr, "Error: Too many input partitions\n");
@@ -1255,7 +1268,6 @@ void tposeIOTransposeGroupIdParallel(
 	extern unsigned int fileChunks; // Number of file chunks
 
 	pthread_t threads[fileChunks]; // Thread array
-	char tempFilePath[100][15]; // Array of output filepaths
 	int threadCtr = 0;
 
 	// Allocate memory for threadAggregatorArray (one for each file chunk)
@@ -1267,10 +1279,16 @@ void tposeIOTransposeGroupIdParallel(
 	// Create threads
 	for(threadCtr = 0; threadCtr < fileChunks; threadCtr++) {
 
-		sprintf(tempFilePath[threadCtr], "temp%u.txt", threadCtr);	
-		debug_print("%u : temp file = %s\n", threadCtr, tempFilePath[threadCtr]);
-		if((tempFileArray[threadCtr] = tposeIOOpenOutputFile(tempFilePath[threadCtr], "w+",(tposeQuery->inputFile)->fieldDelimiter)) == NULL) {
-			fprintf(stderr, "Error: Cannot open temp file\n");
+		/* Private scratch storage cannot collide with input, output, another
+		   invocation, or unrelated files in the working directory. */
+		FILE* scratch = tmpfile();
+		if(!scratch) {
+			fprintf(stderr, "Error: Cannot create parallel temporary stream\n");
+			exit(EXIT_FAILURE);
+		}
+		tempFileArray[threadCtr] = tposeIOOutputFileAlloc(scratch, tposeQuery->inputFile->fieldDelimiter);
+		if(!tempFileArray[threadCtr]) {
+			fclose(scratch);
 			exit(EXIT_FAILURE);
 		}
 
@@ -1303,8 +1321,7 @@ void tposeIOTransposeGroupIdParallel(
 	// Clean-up
 	for(threadCtr=0; threadCtr<fileChunks; threadCtr++) {
 		tposeIOAggregatorFree(&(threadAggregatorArray[threadCtr]->aggregator));
-		tposeIOCloseOutputFile(tempFileArray[threadCtr]);
-		remove(tempFilePath[threadCtr]);
+		if(tposeIOCloseOutputFile(tempFileArray[threadCtr]) != 0) exit(EXIT_FAILURE);
 	}
 	free(threadAggregatorArray);
 
@@ -1344,10 +1361,20 @@ void tposeIOTransposeGroupIdReduce(
 	// Write temp files to final output file
 	for(threadCtr=0; threadCtr < fileChunks; threadCtr++) {
 		fdSrc = tempFileArray[threadCtr]->fd;
-		fseek(fdSrc, 0, SEEK_SET);
-		clearerr(fdSrc);
+		tposeIOFlushOutput(fdSrc);
+		if(fseek(fdSrc, 0, SEEK_SET) != 0) {
+			fprintf(stderr, "Error: Cannot seek parallel output stream\n");
+			exit(EXIT_FAILURE);
+		}
 		while((c = getc(fdSrc)) != EOF) {
-			putc(c, fdDest);
+			if(putc(c, fdDest) == EOF) {
+				fprintf(stderr, "Error: Cannot write output stream\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+		if(ferror(fdSrc)) {
+			fprintf(stderr, "Error: Cannot read parallel output stream\n");
+			exit(EXIT_FAILURE);
 		}
 	}
 
@@ -1385,7 +1412,7 @@ void tposeIOPrintOutput(
 				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], fieldDelimiter);
 		}
 
-		fflush((tposeQuery->outputFile)->fd);
+		tposeIOFlushOutput((tposeQuery->outputFile)->fd);
 	}
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
@@ -1395,7 +1422,7 @@ void tposeIOPrintOutput(
 				fprintf((tposeQuery->outputFile)->fd, "%lld%c", (long long) (tposeQuery->aggregator)->counts[i], fieldDelimiter);
 		}
 
-		fflush((tposeQuery->outputFile)->fd);
+		tposeIOFlushOutput((tposeQuery->outputFile)->fd);
 	}
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_AVG) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
@@ -1405,7 +1432,7 @@ void tposeIOPrintOutput(
 				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->avgs[i], fieldDelimiter);
 		}
 
-		fflush((tposeQuery->outputFile)->fd);
+		tposeIOFlushOutput((tposeQuery->outputFile)->fd);
 	}
 
 }
@@ -1461,7 +1488,7 @@ void tposeIOPrintGroupIdData(
 				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->aggregates[i], fieldDelimiter);
 		}
 
-		fflush((tposeQuery->outputFile)->fd);
+		tposeIOFlushOutput((tposeQuery->outputFile)->fd);
 	}
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
@@ -1471,7 +1498,7 @@ void tposeIOPrintGroupIdData(
 				fprintf((tposeQuery->outputFile)->fd, "%lld%c", (long long) (tposeQuery->aggregator)->counts[i], fieldDelimiter);
 		}
 
-		fflush((tposeQuery->outputFile)->fd);
+		tposeIOFlushOutput((tposeQuery->outputFile)->fd);
 	}
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_AVG) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
@@ -1481,7 +1508,7 @@ void tposeIOPrintGroupIdData(
 				fprintf((tposeQuery->outputFile)->fd, "%.2f%c", (tposeQuery->aggregator)->avgs[i], fieldDelimiter);
 		}
 
-		fflush((tposeQuery->outputFile)->fd);
+		tposeIOFlushOutput((tposeQuery->outputFile)->fd);
 	}
 }
 
@@ -1544,7 +1571,7 @@ void tposeIOPrintGroupIdDataParallel(
 				fprintf(fd, "%.2f%c", aggregator->aggregates[i], fieldDelimiter);
 		}
 
-		fflush(fd);
+		tposeIOFlushOutput(fd);
 	}
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_COUNT) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
@@ -1554,7 +1581,7 @@ void tposeIOPrintGroupIdDataParallel(
 				fprintf(fd, "%lld%c", (long long) aggregator->counts[i], fieldDelimiter);
 		}
 
-		fflush(fd);
+		tposeIOFlushOutput(fd);
 	}
 	if(tposeQuery->aggregateType == TPOSE_IO_AGGREGATION_AVG) {
 		for(i = 0; i < ((tposeQuery->outputFile)->fileGroupHeader)->numFields ; ++i) {
@@ -1564,7 +1591,7 @@ void tposeIOPrintGroupIdDataParallel(
 				fprintf(fd, "%.2f%c", aggregator->avgs[i], fieldDelimiter);
 		}
 
-		fflush(fd);
+		tposeIOFlushOutput(fd);
 	}
 
 }

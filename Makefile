@@ -14,7 +14,7 @@ DESTDIR ?=
 src = $(wildcard src/*.c)
 obj = $(src:.c=.o)
 dep = $(obj:.o=.d)
-test_src = tests/group_keys.c tests/eof.c src/btree.c src/tpose_io.c
+test_src = tests/group_keys.c tests/eof.c tests/output.c src/btree.c src/tpose_io.c src/output.c
 # Exercise real partition construction with small fixtures in the C test helper.
 test_cppflags = -Isrc -DTPOSE_IO_CHUNK_SIZE=65536
 headers = $(wildcard src/*.h)

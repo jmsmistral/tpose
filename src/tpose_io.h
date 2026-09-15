@@ -99,6 +99,7 @@
 		unsigned char fieldDelimiter;
 		TposeHeader* fileIdHeader;
 		TposeHeader* fileGroupHeader;
+		struct TposeOutputTransaction* transaction; /* only for named CLI destinations */
 	} TposeOutputFile;
 
 	/**
@@ -128,6 +129,12 @@
 	/* Output */
 	TposeOutputFile* tposeIOOpenOutputFile(char* filePath, const char* mode, unsigned char fieldDelimiter);
 	int tposeIOCloseOutputFile(TposeOutputFile* outputFile);
+	/* Validate the query first. Commit finalizes a named destination; free the
+	   output object afterwards. Freeing an uncommitted object discards its file. */
+	TposeOutputFile* tposeIOOpenDestination(TposeInputFile* input, const char* path, unsigned char delimiter);
+	int tposeIOCommitOutput(TposeOutputFile* output);
+	void tposeIODiscardOutput(TposeOutputFile* output);
+	void tposeIOFlushOutput(FILE* stream);
 
 	TposeOutputFile* tposeIOOutputFileAlloc(FILE* fd, unsigned char fieldDelimiter);
 	void tposeIOOutputFileFree(TposeOutputFile** outputFilePtr);

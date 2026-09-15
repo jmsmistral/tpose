@@ -70,6 +70,11 @@ Get more details on the different options by running:
 $ tpose --help
 ```
 
+An explicit output filename is published only after processing and writing
+succeed, preserving any previous result on failure. It must be a regular file
+path, not the input file, a symlink, or a special file. Without an output
+filename, results stream to stdout and may be partial if an error occurs.
+
 #### Simple transpose ####
 Every row must have the same number of fields as the first row. Empty cells
 are allowed, including a final empty cell represented by a trailing delimiter.

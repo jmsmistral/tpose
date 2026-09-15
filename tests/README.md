@@ -132,17 +132,55 @@ wide, blank, and extra-empty-field rows must fail with an exact diagnostic and
 no stdout output; tab cases also run against protected input memory. The prior
 width-limit and EOF tests now expect the corrected output format.
 
-Shape validation does not protect an existing output file from being truncated
-when it is opened: safe output creation/replacement remains the next review item.
+## Output safety regression tests
+
+The output-protection/error-status and predictable parallel-temporary-file
+findings are fixed. The CLI validates field selections and option dependencies
+before creating output. Named destinations are staged in a unique `.tpose-*`
+file in the destination directory. Successful publication follows checked
+writing, flushing, file synchronization, and closing. Existing results are
+atomically replaced; new paths are published with a hard link so a concurrent
+creator is not overwritten. Destination identity is checked again before
+publication. Handled failures discard the staged file and preserve the old
+result, or leave a previously absent destination absent.
+
+Input/output aliases are checked by device and inode, including hard links and
+input symlinks. Output symlinks (including dangling links), directories, and
+special files are rejected. Named outputs require a writable destination
+directory and a filesystem supporting sibling temporary files and rename/link.
+Existing basic permission bits are retained, and new files honor the umask.
+Atomic replacement creates a new inode: other hard links retain the old data,
+and ownership, ACLs, and extended attributes are not copied. The identity check
+is not a lock against concurrent in-place edits. Abrupt termination can leave
+a private staged file; this is not a power-loss durability guarantee.
+
+Stdout remains streaming. Write/flush/close failures return nonzero, including
+broken pipes and file-size limits. Stdout aliases are rejected when detectable,
+but a shell redirect such as `> input.tsv` can truncate the input before tpose
+starts; use the explicit output argument for file protection. Parallel workers
+use automatically cleaned `tmpfile()` streams, and reduction checks seek,
+read, write, flush, and close failures rather than clearing error indicators.
+
+`output.sh` checks existing and absent destinations after invalid queries,
+parser failures, and write failures; successful contents and permission modes;
+aliases and special paths; destination changes before publication; and staged
+file cleanup. `output.c` uses a child with a four-byte file-size limit, a broken
+pipe, and invalid descriptors to reproduce I/O failures portably. Diagnostics
+are relayed through a pipe so the file-size limit cannot truncate them. Tests
+also exercise input/output named `temp0.txt`, unrelated `temp1.txt`, failed
+parallel writes, and concurrent parallel invocations in the same directory.
+
+Supporting validation fixes reject zero, negative, and overflowing field
+indexes and incomplete aggregation options. Help and error-help leave standard
+streams to the registered exit handler, fixing the earlier double-close path.
 
 This is an initial smoke suite, not comprehensive correctness or memory-safety
 coverage. The remaining parsing, memory, and file-handling defects remain
-separate fixes, including header/numeric/CLI validation, ID ordering semantics,
-and help/error-help. Errors may leave partial output; atomic output and temporary
-file cleanup remain separate review items. Small inputs with the CLI's `-P`
+separate fixes, including remaining header/numeric/CLI validation and ID ordering
+semantics. Small inputs with the CLI's `-P`
 only exercise its serial fallback, which is why the C helper tests parallel
 execution directly with a smaller chunk threshold. These checks do not establish
-full-scale performance, resource usage, race freedom, or failure cleanup.
+full-scale performance, resource usage, or race freedom under all failure modes.
 Leak detection is explicitly disabled for this memory-access check because
 allocation leaks remain a separate review item. Broader sanitizer coverage
 will accompany the remaining fixes.
