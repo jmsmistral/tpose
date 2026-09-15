@@ -120,7 +120,7 @@ for count in 5000 5001; do
     done
 done
 
-# Exercise the real ID partition scanner using sparse virtual memory in C.
+# Exercise the real ID partition scanner using a small virtual mapping in C.
 : > empty
 limit_output 'partition ID width 4999' empty "$key_binary" partition-id 4999
 limit_error 'partition ID width 5000' \

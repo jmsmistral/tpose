@@ -36,7 +36,9 @@
 	#define TPOSE_IO_MAX_FIELDS 5000 /* maximum distinct output groups */
 	#define TPOSE_IO_MAX_FIELD_WIDTH 5000 /* buffer bytes, including terminating zero */
 	
+	#ifndef TPOSE_IO_CHUNK_SIZE
 	#define TPOSE_IO_CHUNK_SIZE 1073741824
+	#endif
 
 	#define TPOSE_IO_AGGREGATION_SUM 0
 	#define TPOSE_IO_AGGREGATION_COUNT 1

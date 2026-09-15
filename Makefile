@@ -14,7 +14,9 @@ DESTDIR ?=
 src = $(wildcard src/*.c)
 obj = $(src:.c=.o)
 dep = $(obj:.o=.d)
-test_src = tests/group_keys.c src/btree.c src/tpose_io.c
+test_src = tests/group_keys.c tests/eof.c src/btree.c src/tpose_io.c
+# Exercise real partition construction with small fixtures in the C test helper.
+test_cppflags = -Isrc -DTPOSE_IO_CHUNK_SIZE=65536
 headers = $(wildcard src/*.h)
 
 .PHONY: all test test-asan test-ubsan clean install uninstall check-compiler
@@ -36,7 +38,7 @@ src/%.o: src/%.c | check-compiler
 	$(CC) $(CPPFLAGS) -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) -pthread -MMD -MP -c $< -o $@
 
 tests/group-keys-test: $(test_src) $(headers) Makefile | check-compiler
-	$(CC) $(CPPFLAGS) -Isrc -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) $(LDFLAGS) -o $@ $(test_src) -pthread $(LDLIBS)
+	$(CC) $(CPPFLAGS) $(test_cppflags) -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) $(LDFLAGS) -o $@ $(test_src) -pthread $(LDLIBS)
 
 test: tpose tests/group-keys-test
 	sh tests/run.sh ./tpose ./tests/group-keys-test
@@ -47,7 +49,7 @@ tpose-asan: $(src) $(headers) Makefile | check-compiler
 
 # Leak cleanup is a separate review item; check invalid memory access here.
 tests/group-keys-test-asan: $(test_src) $(headers) Makefile | check-compiler
-	$(CC) $(CPPFLAGS) -Isrc -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) -O1 -g -fsanitize=address -fno-omit-frame-pointer $(LDFLAGS) -o $@ $(test_src) -pthread $(LDLIBS)
+	$(CC) $(CPPFLAGS) $(test_cppflags) -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) -O1 -g -fsanitize=address -fno-omit-frame-pointer $(LDFLAGS) -o $@ $(test_src) -pthread $(LDLIBS)
 
 test-asan: tpose-asan tests/group-keys-test-asan
 	ASAN_OPTIONS=detect_leaks=0 sh tests/run.sh ./tpose-asan ./tests/group-keys-test-asan
@@ -56,7 +58,7 @@ tpose-ubsan: $(src) $(headers) Makefile | check-compiler
 	$(CC) $(CPPFLAGS) -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined $(LDFLAGS) -o $@ $(src) -pthread $(LDLIBS)
 
 tests/group-keys-test-ubsan: $(test_src) $(headers) Makefile | check-compiler
-	$(CC) $(CPPFLAGS) -Isrc -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined $(LDFLAGS) -o $@ $(test_src) -pthread $(LDLIBS)
+	$(CC) $(CPPFLAGS) $(test_cppflags) -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined $(LDFLAGS) -o $@ $(test_src) -pthread $(LDLIBS)
 
 test-ubsan: tpose-ubsan tests/group-keys-test-ubsan
 	sh tests/run.sh ./tpose-ubsan ./tests/group-keys-test-ubsan
