@@ -14,7 +14,7 @@ limit_error() {
     diagnostic=$2
     shift 2
     if "$@" > actual 2> stderr; then
-        fail "$name (oversized input accepted)"
+        fail "$name (invalid input accepted)"
     else
         status=$?
         [ "$status" -eq 1 ] || fail "$name (exit status)"
@@ -34,7 +34,7 @@ for width in 4999 5000 6000; do
                 first = field == "header" ? value : "left"
                 second = field == "simple" ? value : "value"
                 printf "%s\tright\n%s\tv\n", first, second > "limit-input.tsv"
-                printf "%s\t%s\t\nright\tv\t\n", first, second > "limit-expected.tsv"
+                printf "%s\t%s\nright\tv\n", first, second > "limit-expected.tsv"
             } else {
                 group = field == "group" ? value : "A"
                 id = field == "id" ? value : "1"

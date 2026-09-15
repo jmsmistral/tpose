@@ -110,10 +110,30 @@ separate manual-partition tests cover empty workers at either end. Production
 partition construction also rejects counts beyond the existing array capacities.
 
 The shared field reader also fixes stale values in empty simple-transpose cells;
-regressions cover interior and final empty cells. Its existing trailing output
-delimiter and the policy for ragged rows remain separate review work. Indexed
-queries now initialize absent selections to -1, as named queries already do,
+regressions cover interior and final empty cells. Indexed queries now initialize
+absent selections to -1, as named queries already do,
 so the shared aggregation path can reliably distinguish ID and group-only modes.
+
+## Simple-transpose shape regression tests
+
+The simple-transpose correctness finding is fixed. Every input row must have
+the same number of fields as the first row. Explicitly empty fields count,
+including one after a trailing delimiter; a blank line is one empty field.
+The entire table is checked before any transposed data is written. A mismatch
+exits with status 1 and reports the one-based row number and actual/expected
+field counts. Output contains delimiters only between cells, preserving any
+delimiter that is needed to represent a final empty cell.
+
+`simple.sh` checks rectangular tables, empty cells and headers, tables of empty
+cells, and blank rows in single-column input. Exact byte comparisons and
+double-transpose round trips verify row/column counts and empty-cell positions.
+Tests cover tabs and commas, both final-newline forms, and output files. Short,
+wide, blank, and extra-empty-field rows must fail with an exact diagnostic and
+no stdout output; tab cases also run against protected input memory. The prior
+width-limit and EOF tests now expect the corrected output format.
+
+Shape validation does not protect an existing output file from being truncated
+when it is opened: safe output creation/replacement remains the next review item.
 
 This is an initial smoke suite, not comprehensive correctness or memory-safety
 coverage. The remaining parsing, memory, and file-handling defects remain
