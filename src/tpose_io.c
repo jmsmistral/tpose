@@ -28,6 +28,24 @@ unsigned int fileChunks;
 off_t partitions[1000];
 TposeOutputFile* tempFileArray[1000];
 
+/* Check before appending a byte, reserving space for the terminating zero. */
+static void tposeIOCheckFieldCapacity(size_t length, const char* field) {
+	if(length >= TPOSE_IO_MAX_FIELD_WIDTH - 1) {
+		fprintf(stderr, "Error: %s exceeds the maximum field width of %u bytes\n",
+		        field, (unsigned int) TPOSE_IO_MAX_FIELD_WIDTH - 1);
+		exit(EXIT_FAILURE);
+	}
+}
+
+/* Called only for new groups: duplicates do not consume another slot. */
+static void tposeIOCheckGroupCapacity(off_t count, const TposeHeader* header) {
+	if(count >= header->maxFields) {
+		fprintf(stderr, "Error: Input exceeds the maximum of %u distinct groups\n",
+		        header->maxFields);
+		exit(EXIT_FAILURE);
+	}
+}
+
 /* Copy the terminating zero as well as the field contents. */
 static char* tposeIODuplicateString(const char* value) {
 	char* copy = strdup(value);
@@ -773,6 +791,7 @@ void tposeIOUniqueGroups(
 
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(groupCharCount, "Group field");
 					tempString[groupCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == fileSize) break;
 				}
@@ -784,6 +803,8 @@ void tposeIOUniqueGroups(
 
 					// Record each full group name once
 					debug_print("tposeIOUniqueGroups(): group = %s\n", tempString);
+
+					tposeIOCheckGroupCapacity(uniqueGroupCount, header);
 
 					// The header owns this stable string; the tree borrows it.
 					allocString = tposeIODuplicateString(tempString);
@@ -888,6 +909,7 @@ void tposeIOTransposeSimple(
 
 				// Get current field value
 				while((*fieldSavePtr != fieldDelimiter) && (*fieldSavePtr != rowDelimiter)) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Field");
 					fieldTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == fileSize) break;
 				}
@@ -1013,6 +1035,7 @@ void tposeIOTransposeGroup(
 
 				// Get group field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Group field");
 					groupTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == iFileSize) break;
 				}
@@ -1046,6 +1069,7 @@ void tposeIOTransposeGroup(
 				
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Numeric field");
 					numericTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == iFileSize) break;
 				}
@@ -1202,6 +1226,7 @@ void tposeIOTransposeGroupId(
 
 				// Get group field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Group field");
 					groupTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == iFileSize) break;
 				}
@@ -1236,6 +1261,7 @@ void tposeIOTransposeGroupId(
 				
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Numeric field");
 					numericTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == iFileSize) break;
 				}
@@ -1262,6 +1288,7 @@ void tposeIOTransposeGroupId(
 				
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "ID field");
 					idTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == iFileSize) break;
 				}
@@ -1426,6 +1453,7 @@ int tposeIOBuildPartitions(
 					// Copy field value
 					while(*partSavePtr != fieldDelimiter && *partSavePtr != rowDelimiter) {
 						++offset;
+						tposeIOCheckFieldCapacity(fieldCharCount, "ID field");
 						tempString[fieldCharCount++] = *partSavePtr++;
 						if(++totalCharCount == partitionCharLimit) break;
 					}
@@ -1621,6 +1649,7 @@ void* tposeIOUniqueGroupsMap(
 
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(groupCharCount, "Group field");
 					tempString[groupCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == partitionCharLimit) break;
 				}
@@ -1632,6 +1661,8 @@ void* tposeIOUniqueGroupsMap(
 
 					// Record each full group name once
 					debug_print("tposeIOUniqueGroups(): group = %s\n", tempString);
+
+					tposeIOCheckGroupCapacity(uniqueGroupCount, header);
 
 					// The header owns this stable string; the tree borrows it.
 					allocString = tposeIODuplicateString(tempString);
@@ -1710,6 +1741,7 @@ void tposeIOUniqueGroupsReduce(
 				
 				// Copy field value
 				while(*charSavePtr != '\0') {
+					tposeIOCheckFieldCapacity(groupCharCount, "Group field");
 					tempString[groupCharCount++] = *charSavePtr++;
 				}
 				tempString[groupCharCount] = '\0';
@@ -1717,6 +1749,8 @@ void tposeIOUniqueGroupsReduce(
 
 				// Insert into btree
 				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, tempString)) == NULL) {
+
+					tposeIOCheckGroupCapacity(uniqueGroupCount, header);
 
 					// The header owns this stable string; the tree borrows it.
 					allocString = tposeIODuplicateString(tempString);
@@ -1877,6 +1911,7 @@ void* tposeIOTransposeGroupMap(
 
 				// Get group field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Group field");
 					groupTempString[fieldCharCount++] = *fieldSavePtr++;
 					++totalCharCount;
 				}
@@ -1910,6 +1945,7 @@ void* tposeIOTransposeGroupMap(
 				
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Numeric field");
 					numericTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == partitionCharLimit) break;
 				}
@@ -2149,6 +2185,7 @@ void* tposeIOTransposeGroupIdMap(
 
 				// Get group field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Group field");
 					groupTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == partitionCharLimit) break;
 				}
@@ -2183,6 +2220,7 @@ void* tposeIOTransposeGroupIdMap(
 				
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "Numeric field");
 					numericTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == partitionCharLimit) break;
 				}
@@ -2209,6 +2247,7 @@ void* tposeIOTransposeGroupIdMap(
 				
 				// Copy field value
 				while(*fieldSavePtr != fieldDelimiter && *fieldSavePtr != rowDelimiter) {
+					tposeIOCheckFieldCapacity(fieldCharCount, "ID field");
 					idTempString[fieldCharCount++] = *fieldSavePtr++;
 					if(++totalCharCount == partitionCharLimit) break;
 				}
