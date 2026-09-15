@@ -61,14 +61,6 @@ make CC=gcc CFLAGS='-O0 -g -Wall -Wextra'
 
 ## Running tpose ##
 
-The current parser limits each processed field to **4,999 bytes**, leaving one
-byte for the string terminator. This covers cells (including headers) in simple
-transpose and group, ID, and numeric values in aggregation. Grouped output can
-contain at most **5,000 distinct groups** across the input; repeated groups do
-not count toward this limit again. These limits apply to serial and parallel
-processing. Exceeding a limit prints an error to standard error and exits with
-status 1.
-
 tpose usage pattern:
 ```bash
 tpose input-file [output-file] [-IGNdiapsPhv]
@@ -257,5 +249,18 @@ customer_id  xxx_rev_A_yyy  xxx_rev_B_yyy  xxx_rev_C_yyy
 3            0.00           9.00           9.00
 4            11.00          0.00           0.00
 ```
+
+#### Note on limits
+
+The current parser limits each processed field to **4,999 bytes**, leaving one
+byte for the string terminator. This covers cells (including headers) in simple
+transpose and group, ID, and numeric values in aggregation. Grouped output can
+contain at most **5,000 distinct groups** across the input; repeated groups do
+not count toward this limit again. These limits apply to serial and parallel
+processing. Exceeding a limit prints an error to standard error and exits with
+status 1.
+
+
+### License
 
 Remember, tpose is free software (licensed under GPLv3)!
