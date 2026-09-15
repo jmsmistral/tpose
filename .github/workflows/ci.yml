@@ -38,6 +38,8 @@ jobs:
         run: make test
       - name: Check memory access with AddressSanitizer
         run: make test-asan
+      - name: Check undefined behavior with UndefinedBehaviorSanitizer
+        run: make test-ubsan
       - name: Check staged installation
         run: |
           make install DESTDIR="$RUNNER_TEMP/tpose-install" PREFIX=/usr

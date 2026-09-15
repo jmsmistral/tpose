@@ -1,6 +1,12 @@
 /tpose
 /tpose-asan
 /tpose-asan.dSYM/
+/tpose-ubsan
+/tpose-ubsan.dSYM/
+/tests/group-keys-test
+/tests/group-keys-test-asan
+/tests/group-keys-test-ubsan
+/tests/group-keys-test*.dSYM/
 /src/*.o
 /src/*.d
 .DS_Store
