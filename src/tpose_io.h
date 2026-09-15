@@ -33,8 +33,8 @@
 	 ** Implementation defs & limits
 	 **/
 	#define TPOSE_IO_MAX_LINE 1048576
-	#define TPOSE_IO_MAX_FIELDS 5000
-	#define TPOSE_IO_MAX_FIELD_WIDTH 5000
+	#define TPOSE_IO_MAX_FIELDS 5000 /* maximum distinct output groups */
+	#define TPOSE_IO_MAX_FIELD_WIDTH 5000 /* buffer bytes, including terminating zero */
 	
 	#define TPOSE_IO_CHUNK_SIZE 1073741824
 

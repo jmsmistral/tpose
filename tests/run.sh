@@ -126,4 +126,6 @@ for mode in group id; do
     done
 done
 
+. "$test_dir/limits.sh"
+
 printf 'Passed %s tests.\n' "$passed"

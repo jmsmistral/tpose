@@ -84,12 +84,48 @@ static void testParallel(const char* mode, char* inputPath, char* aggregation) {
     check(fflush(stdout) == 0, "flush parallel output");
 }
 
+static void testPartitionId(const char* widthArg) {
+    check(strcmp(widthArg, "4999") == 0 || strcmp(widthArg, "5000") == 0,
+          "partition test width");
+    size_t width = (size_t) strtoul(widthArg, NULL, 10);
+    /* The partitioner starts its interior boundary at fileSize % chunkSize.
+       Reserve virtual address space, touching only the rows at that boundary;
+       no GiB file is written or scanned. */
+    size_t tail = 16384;
+    size_t length = (size_t) TPOSE_IO_CHUNK_SIZE + tail;
+    char* data = mmap(NULL, length, PROT_READ | PROT_WRITE,
+                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    check(data != MAP_FAILED, "map partition fixture");
+    data[tail] = '\n';
+    memset(data + tail + 1, '1', width);
+    const char* rest = "\tA\t1\n2\tA\t1\n";
+    memcpy(data + tail + 1 + width, rest, strlen(rest));
+    TposeInputFile input = {0};
+    input.fileAddr = input.dataAddr = data;
+    input.fileSize = (off_t) length;
+    input.fieldDelimiter = '\t';
+    TposeQuery query = {0};
+    query.inputFile = &input;
+    query.id = 0;
+    fileChunks = 0;
+    check(tposeIOBuildPartitions(&query, TPOSE_IO_PARTITION_ID) == 0,
+          "partition an ID at the width limit");
+    check(fileChunks == 2 && partitions[1] > (off_t) tail &&
+          partitions[1] < (off_t) (tail + width + strlen(rest) + 1),
+          "partition boundary remains within test rows");
+    check(munmap(data, length) == 0, "unmap partition fixture");
+}
+
 int main(int argc, char** argv) {
     if(argc == 1) {
         testTree();
         return EXIT_SUCCESS;
     }
-    check(argc == 4, "usage: group-keys-test [group|id input-file sum|count|avg]");
+    if(argc == 3 && strcmp(argv[1], "partition-id") == 0) {
+        testPartitionId(argv[2]);
+        return EXIT_SUCCESS;
+    }
+    check(argc == 4, "usage: group-keys-test [group|id input-file sum|count|avg] or partition-id width");
     testParallel(argv[1], argv[2], argv[3]);
     return EXIT_SUCCESS;
 }
