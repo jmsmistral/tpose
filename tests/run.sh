@@ -128,5 +128,6 @@ done
 
 . "$test_dir/limits.sh"
 . "$test_dir/eof.sh"
+. "$test_dir/simple.sh"
 
 printf 'Passed %s tests.\n' "$passed"

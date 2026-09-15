@@ -71,6 +71,10 @@ $ tpose --help
 ```
 
 #### Simple transpose ####
+Every row must have the same number of fields as the first row. Empty cells
+are allowed, including a final empty cell represented by a trailing delimiter.
+Rows with missing or extra fields are rejected with a row-numbered error.
+
 ```bash
 $ cat data_ex1_simple.txt | column -s$'\t' -t
 Quarter  Europe  Asia  US

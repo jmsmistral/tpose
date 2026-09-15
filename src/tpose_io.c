@@ -870,14 +870,33 @@ void tposeIOUniqueGroups(TposeQuery* query, BTree* tree) {
  **/
 void tposeIOTransposeSimple(TposeQuery* query) {
     const char* end = query->inputFile->fileAddr + query->inputFile->fileSize;
+    unsigned int columns = query->inputFile->fileHeader->maxFields;
+    const char* cursor = query->inputFile->fileAddr;
+    TposeRecord record;
+    size_t row = 0;
+    /* Validate the whole table before emitting any transposed data. Empty
+       fields count, including the field after a trailing delimiter. */
+    while(tposeIONextRecord(&cursor, end, &record)) {
+        size_t fields = 1;
+        for(const char* p = record.begin; p < record.end; ++p)
+            if(*p == query->inputFile->fieldDelimiter) ++fields;
+        ++row;
+        if(fields != columns) {
+            fprintf(stderr, "Error: Row %zu has %zu field%s; expected %u\n",
+                    row, fields, fields == 1 ? "" : "s", columns);
+            exit(EXIT_FAILURE);
+        }
+    }
+
     char field[TPOSE_IO_MAX_FIELD_WIDTH];
-    for(unsigned int column = 0; column < query->inputFile->fileHeader->maxFields; ++column) {
-        const char* cursor = query->inputFile->fileAddr;
-        TposeRecord record;
+    for(unsigned int column = 0; column < columns; ++column) {
+        cursor = query->inputFile->fileAddr;
+        int first = 1;
         while(tposeIONextRecord(&cursor, end, &record)) {
             tposeIOReadField(record, query->inputFile->fieldDelimiter, (int) column, field, "Field");
-            /* Keep the existing trailing-delimiter output format. */
-            fprintf(query->outputFile->fd, "%s%c", field, query->outputFile->fieldDelimiter);
+            if(!first) fputc(query->outputFile->fieldDelimiter, query->outputFile->fd);
+            fputs(field, query->outputFile->fd);
+            first = 0;
         }
         fputc(rowDelimiter, query->outputFile->fd);
     }

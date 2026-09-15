@@ -60,12 +60,12 @@ eof_group_case 'byte 255 in output' eof-input.tsv parallel-id eof-expected.tsv s
 
 for contents in one-byte one-row one-column records empty-cell interior-empty; do
     case "$contents" in
-        one-byte) printf x > eof-input.tsv; printf 'x\t\n' > eof-expected.tsv ;;
-        one-row) printf 'a\tb' > eof-input.tsv; printf 'a\t\nb\t\n' > eof-expected.tsv ;;
-        one-column) printf 'a\n1' > eof-input.tsv; printf 'a\t1\t\n' > eof-expected.tsv ;;
-        records) printf 'a\tb\n1\t2' > eof-input.tsv; printf 'a\t1\t\nb\t2\t\n' > eof-expected.tsv ;;
-        empty-cell) printf 'a\tb\n1\t' > eof-input.tsv; printf 'a\t1\t\nb\t\t\n' > eof-expected.tsv ;;
-        interior-empty) printf 'a\tb\n1\t\n\t4' > eof-input.tsv; printf 'a\t1\t\t\nb\t\t4\t\n' > eof-expected.tsv ;;
+        one-byte) printf x > eof-input.tsv; printf 'x\n' > eof-expected.tsv ;;
+        one-row) printf 'a\tb' > eof-input.tsv; printf 'a\nb\n' > eof-expected.tsv ;;
+        one-column) printf 'a\n1' > eof-input.tsv; printf 'a\t1\n' > eof-expected.tsv ;;
+        records) printf 'a\tb\n1\t2' > eof-input.tsv; printf 'a\t1\nb\t2\n' > eof-expected.tsv ;;
+        empty-cell) printf 'a\tb\n1\t' > eof-input.tsv; printf 'a\t1\nb\t\n' > eof-expected.tsv ;;
+        interior-empty) printf 'a\tb\n1\t\n\t4' > eof-input.tsv; printf 'a\t1\t\nb\t\t4\n' > eof-expected.tsv ;;
     esac
     limit_output "simple EOF $contents" eof-expected.tsv "$binary" eof-input.tsv
     limit_output "guarded simple EOF $contents" eof-expected.tsv "$key_binary" eof simple eof-input.tsv sum
