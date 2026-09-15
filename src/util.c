@@ -17,6 +17,7 @@
 */
 
 #include "util.h"
+#include <limits.h>
 
 
 
@@ -135,44 +136,20 @@ close_stdout (void)
       else
         fprintf (stderr, "%s\n", write_error);
 
-      exit(EXIT_FAILURE);
+      _Exit(EXIT_FAILURE);
     }
 
    if (close_stream (stderr) != 0)
-     exit(EXIT_FAILURE);
+     _Exit(EXIT_FAILURE);
 }
 
 
 
-int stringToInteger
-(
-	char* string
-) {
-
-	char* tail;
-	int val = 0;
-
-	if((*string == '\0') || (string == NULL))
-		return -1;
-
-	errno = 0;
-
-	val = strtol(string, &tail, 0);
-
-	if(errno) {
-		printf("Error - You have entered a very large value!\n");
-		return -1; // Overflow
-	}
-	else {
-		if(/*val == 0 &&*/ tail != NULL && *tail != '\0') {
-			printf("tail = %s\n", tail);
-			return -1;
-		}
-		else
-			return val;
-		//string = tail;
-	}
-		
+int stringToInteger(char* string) {
+    if(!string || !*string) return -1;
+    char* tail;
+    errno = 0;
+    long value = strtol(string, &tail, 0);
+    if(errno || *tail || value <= 0 || value > INT_MAX) return -1;
+    return (int) value;
 }
-
-

@@ -5,6 +5,7 @@ char* prefixGlobal = "";
 char* suffixGlobal = "";
 
 void testEofFile(const char* mode, const char* path, char* aggregation);
+void testOutput(int argc, char** argv);
 
 static void check(int condition, const char* message) {
     if(!condition) {
@@ -119,6 +120,10 @@ static void testPartitionId(const char* widthArg) {
 }
 
 int main(int argc, char** argv) {
+    if(argc >= 3 && strcmp(argv[1], "output") == 0) {
+        testOutput(argc, argv);
+        return EXIT_SUCCESS;
+    }
     if(argc == 1) {
         testTree();
         return EXIT_SUCCESS;

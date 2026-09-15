@@ -70,6 +70,11 @@ Get more details on the different options by running:
 $ tpose --help
 ```
 
+An explicit output filename is published only after processing and writing
+succeed, preserving any previous result on failure. It must be a regular file
+path, not the input file, a symlink, or a special file. Without an output
+filename, results stream to stdout and may be partial if an error occurs.
+
 #### Simple transpose ####
 Every row must have the same number of fields as the first row. Empty cells
 are allowed, including a final empty cell represented by a trailing delimiter.
@@ -109,6 +114,21 @@ rev_A	rev_B	rev_C
 ```
 
 #### Transpose over GROUP and ID field ####
+
+Rows for each ID must be consecutive. Sorting by ID is sufficient, but numeric
+or alphabetical order is not required: `2, 2, 1, 1` is valid; `1, 2, 1` is not.
+IDs are compared as exact, case-sensitive strings (`1` and `01` are different).
+This rule also includes rows with a nonempty ID but a missing group or numeric
+value. Empty or missing IDs are skipped and do not end the current ID run.
+
+Both serial and parallel processing check the entire input before writing
+ID-grouped results. An ID that reappears after its run ends causes an error
+identifying the ID and input row (the header is row 1). Existing named output
+files are preserved. Validation adds an input scan and a temporary index of ID
+runs, with memory proportional to the number and lengths of those runs.
+
+Future TODO: support unsorted IDs by aggregating across nonconsecutive rows.
+
 ```bash
 $ cat data_ex2_group.txt | column -s$'\t' -t
 Customer_id  Revenue_group  Amount
