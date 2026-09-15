@@ -177,6 +177,70 @@ static void tposeIOFinishId(TposeQuery* query, TposeAggregator* aggregator,
     else tposeIOPrintGroupIdDataParallel(id, query, aggregator, (unsigned int) threadId);
 }
 
+typedef struct {
+    char* id;
+    size_t row;
+} TposeIdRun;
+
+static int tposeIOCompareIdRuns(const void* left, const void* right) {
+    const TposeIdRun* a = left;
+    const TposeIdRun* b = right;
+    int order = strcmp(a->id, b->id);
+    if(order) return order;
+    return (a->row > b->row) - (a->row < b->row);
+}
+
+/* Validate the complete input before serial output or parallel workers start.
+   Sort only this index of runs, never the input or the output. Matching IDs
+   in two runs violate the contract even if they are in different partitions. */
+static void tposeIOValidateIdOrder(TposeQuery* query) {
+    TposeIdRun* runs = NULL;
+    size_t count = 0, capacity = 0, row = 1;
+    char id[TPOSE_IO_MAX_FIELD_WIDTH];
+    const char* cursor = query->inputFile->dataAddr;
+    const char* end = query->inputFile->fileAddr + query->inputFile->fileSize;
+    TposeRecord record;
+    int failed = 0;
+    while(tposeIONextRecord(&cursor, end, &record)) {
+        ++row; /* Header is row 1, including for indexed queries. */
+        tposeIOReadField(record, query->inputFile->fieldDelimiter, query->id, id, "ID field");
+        /* Empty/missing IDs do not contribute to aggregation or end a run.
+           All other IDs count, even on rows with no group/numeric value. */
+        if(!id[0] || (count && strcmp(runs[count - 1].id, id) == 0)) continue;
+        if(count == capacity) {
+            if(capacity > (size_t) -1 / sizeof(*runs) / 2) goto allocationFailure;
+            size_t next = capacity ? capacity * 2 : 128;
+            TposeIdRun* grown = realloc(runs, next * sizeof(*runs));
+            if(!grown) goto allocationFailure;
+            runs = grown;
+            capacity = next;
+        }
+        char* ownedId = strdup(id);
+        if(!ownedId) goto allocationFailure;
+        runs[count++] = (TposeIdRun) {ownedId, row};
+    }
+    if(count > 1) qsort(runs, count, sizeof(*runs), tposeIOCompareIdRuns);
+    const TposeIdRun* repeated = NULL;
+    for(size_t i = 1; i < count; ++i) {
+        if(strcmp(runs[i - 1].id, runs[i].id) == 0 &&
+           (!repeated || runs[i].row < repeated->row)) repeated = &runs[i];
+    }
+    if(repeated) {
+        fprintf(stderr, "Error: ID '%s' reappears on row %zu; rows for each ID must be consecutive (group or sort input by ID)\n",
+                repeated->id, repeated->row);
+        failed = 1;
+    }
+    goto cleanup;
+
+allocationFailure:
+    fprintf(stderr, "Error: Cannot allocate ID ordering index\n");
+    failed = 1;
+cleanup:
+    for(size_t i = 0; i < count; ++i) free(runs[i].id);
+    free(runs);
+    if(failed) exit(EXIT_FAILURE);
+}
+
 /* Serial and parallel paths commit each bounded record exactly once. */
 static void tposeIOAggregateRange(TposeQuery* query, BTree* tree, TposeAggregator* aggregator,
                                   const char* cursor, const char* end, int threadId) {
@@ -937,6 +1001,7 @@ void tposeIOTransposeGroup(TposeQuery* query, BTree* tree) {
  ** Transposes numeric values for each unique group and id value
  **/
 void tposeIOTransposeGroupId(TposeQuery* query, BTree* tree) {
+    tposeIOValidateIdOrder(query);
     query->aggregator = tposeIOAggregatorAlloc(query->outputFile->fileGroupHeader->numFields);
     if(!query->aggregator) exit(EXIT_FAILURE);
     tposeIOPrintGroupIdHeader(query);
@@ -1264,6 +1329,8 @@ void tposeIOTransposeGroupReduce(
 void tposeIOTransposeGroupIdParallel(
 	TposeQuery* tposeQuery
 ) {
+
+    tposeIOValidateIdOrder(tposeQuery);
 
 	extern unsigned int fileChunks; // Number of file chunks
 

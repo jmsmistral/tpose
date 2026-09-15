@@ -379,7 +379,8 @@ Usage: %s input-file [output-file] [--options] \n\n", program_name);
   fprintf(out, "  -i, --indexed\
 \t\t\tuse field indexes (e.g. 1,2,...) instead of names\n");
   fprintf(out, "  -I<field>, --id=<field>\
-\tdefines ID field in input (requires --group and --numeric)\n");
+\tdefines ID field in input (requires --group and --numeric)\n\
+\t\t\t\tRows for each ID must be consecutive; numeric sorting is not required\n");
   fprintf(out, "  -G<field>, --group=<field>\
 \tdefines GROUP field in input (requires --numeric)\n");
   fprintf(out, "  -N<field>, --numeric=<field>\

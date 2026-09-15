@@ -177,10 +177,36 @@ Supporting validation fixes reject zero, negative, and overflowing field
 indexes and incomplete aggregation options. Help and error-help leave standard
 streams to the registered exit handler, fixing the earlier double-close path.
 
+## ID ordering regression tests
+
+The undocumented contiguous-ID requirement is now documented and enforced.
+Before serial ID output or parallel ID aggregation starts, a shared preflight
+scans the full input and indexes each run of equal, nonempty IDs. Sorting that
+index by exact ID string and row identifies nonconsecutive repeats, including
+those across worker partitions. Only the index is sorted; output retains input
+run order. The earliest repeat reports its ID and one-based input row, exits
+with status 1, and produces no result bytes. Named destinations are preserved.
+The index is freed before aggregation and on an ordering failure. It adds an
+input scan, O(R log R) index sorting, and storage for R run entries and their ID
+strings. For valid input, R equals the number of distinct nonempty IDs.
+
+Nonempty IDs on rows with missing group/numeric values still count. Empty or
+missing IDs are skipped and do not end a run. Numeric sorting is unnecessary;
+ID identity is case-sensitive and preserves numeric spellings such as `01`.
+Unsorted-input aggregation remains a future TODO rather than being silently
+accepted with split totals.
+
+`id-order.sh` tests sum/count/average, serial and actual parallel coordinators,
+repeats within and across partitions, final records without newlines, descending
+valid blocks, exact string identity, earliest-error reporting, skipped fields,
+indexed/reordered columns, comma delimiters, output rollback, and index growth
+beyond 5,000 IDs. Guarded-input tests also run real automatic partitioning with
+multiple partitions. The checks run in all three existing test configurations.
+
 This is an initial smoke suite, not comprehensive correctness or memory-safety
 coverage. The remaining parsing, memory, and file-handling defects remain
-separate fixes, including remaining header/numeric/CLI validation and ID ordering
-semantics. Small inputs with the CLI's `-P`
+separate fixes, including remaining header/numeric/CLI validation.
+Small inputs with the CLI's `-P`
 only exercise its serial fallback, which is why the C helper tests parallel
 execution directly with a smaller chunk threshold. These checks do not establish
 full-scale performance, resource usage, or race freedom under all failure modes.

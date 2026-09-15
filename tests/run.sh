@@ -130,5 +130,6 @@ done
 . "$test_dir/eof.sh"
 . "$test_dir/simple.sh"
 . "$test_dir/output.sh"
+. "$test_dir/id-order.sh"
 
 printf 'Passed %s tests.\n' "$passed"
