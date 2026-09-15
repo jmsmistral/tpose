@@ -4,7 +4,7 @@ Run `make test` from the repository root, using the same `CC` setting as the
 build (for example, `make test CC=gcc-16` on macOS).
 
 The suite uses GNU GCC, a POSIX shell, and standard Unix utilities (`mktemp`,
-`awk`, `diff`, `grep`, `sed`, `tr`, and `cmp` for the CI installation check). No Python
+`awk`, `diff`, `grep`, `sed`, `tr`, `wc`, and `cmp` for the CI installation check). No Python
 or test framework is required. Every run uses its own temporary directory,
 which is removed on exit. A failed command, unexpected diagnostic, or output
 mismatch fails the suite. Make also builds a small C test executable for direct
@@ -45,8 +45,8 @@ The C executable supplies two exact partitions to the production parallel
 coordinators, then the shell compares their results with the same expected
 outputs as the serial commands. One collision pair spans the two partitions;
 others occur within each partition. This exercises worker discovery, header
-reduction, and both aggregation paths without creating a 1 GiB fixture. It does
-not validate general automatic file partitioning or its boundary handling.
+reduction, and both aggregation paths without creating a 1 GiB fixture. The
+separate EOF tests below exercise automatic partition construction as well.
 
 `make test-ubsan` runs the suite with GCC's UndefinedBehaviorSanitizer, configured
 to fail immediately on a diagnostic. Use the same `CC` setting as for the other
@@ -57,7 +57,7 @@ on both platforms.
 
 The fixed-buffer write-limit finding is fixed. Buffers reserve their final byte
 for the terminating zero: at most 4,999 bytes of field content are copied.
-Capacity is checked before appending a byte in simple transpose, serial and
+Capacity is checked before copying field contents in simple transpose, serial and
 parallel aggregation, group discovery/reduction, and ID partition scanning.
 Group discovery checks capacity before inserting a new group, both within each
 worker and when combining workers, allowing at most 5,000 distinct groups.
@@ -77,18 +77,52 @@ exceeding capacity. Error tests require exit status 1 and the exact diagnostic,
 so sanitizer failures cannot count as successful rejection.
 
 A focused C probe also exercises the real ID partition scanner with 4,999- and
-5,000-byte IDs. It reserves sparse anonymous virtual memory and touches only a
-few test rows near the split; it does not create or scan a 1 GiB file. This checks
-the ID buffer limit, not the partitioner's broader correctness. All limit
-tests run in the normal, AddressSanitizer, and UndefinedBehaviorSanitizer suites.
+5,000-byte IDs. The test helper now uses 64 KiB chunks, so it only needs a small
+anonymous mapping with test rows near the split. All limit tests run in the
+normal, AddressSanitizer, and UndefinedBehaviorSanitizer suites.
+
+## End-of-file regression tests
+
+The EOF overread and dropped-final-record finding is fixed. Headers and data
+records use a shared reader with an exclusive end pointer. It returns the last
+record whether or not a newline terminates it, without inventing a record after
+a trailing newline. Aggregation consumes each record once. Empty partitions do
+not read input or emit an uninitialized ID. A header without data rows, or data
+without any nonempty group values, fails with a diagnostic and status 1 instead
+of asserting. Simple transpose accepts a single unterminated row or column.
+
+`eof.sh` checks sum/count/average with and without a final newline, different
+field orders, a new group or ID at EOF, repeated final IDs, an empty final field,
+header-only and empty inputs, exact 4 KiB/16 KiB file sizes, and field-width
+limits at EOF. `eof.c` places each fixture immediately before an inaccessible
+memory page. This exposes overreads that ordinary mmap padding can hide, even
+without a sanitizer. A byte-255 fixture also checks that the parallel output
+reducer keeps `getc` results in an `int`, distinguishing every byte from EOF.
+
+Make compiles only the C test helper with `TPOSE_IO_CHUNK_SIZE=65536`; the normal
+CLI still uses 1 GiB chunks. Tests exercise actual partition construction and
+worker/reducer execution using small fixtures with exact chunk lengths,
+remainders, IDs spanning proposed boundaries, no later newline or distinct ID,
+and guarded EOF. They assert that expected multi-partition cases really create
+multiple partitions, and that all endpoints refer to data bytes within the
+input. Automatically constructed empty/duplicate partitions are collapsed;
+separate manual-partition tests cover empty workers at either end. Production
+partition construction also rejects counts beyond the existing array capacities.
+
+The shared field reader also fixes stale values in empty simple-transpose cells;
+regressions cover interior and final empty cells. Its existing trailing output
+delimiter and the policy for ragged rows remain separate review work. Indexed
+queries now initialize absent selections to -1, as named queries already do,
+so the shared aggregation path can reliably distinguish ID and group-only modes.
 
 This is an initial smoke suite, not comprehensive correctness or memory-safety
 coverage. The remaining parsing, memory, and file-handling defects remain
-separate fixes. End-of-file handling, empty cells/ragged rows, help/error-help,
-and general automatic partition construction are not covered yet. Limit errors
-may leave partial output; atomic output and temporary-file cleanup remain separate
-review items. Small inputs with the CLI's `-P` would only exercise the serial
-fallback, which is why the parallel tests call the coordinators directly.
+separate fixes, including header/numeric/CLI validation, ID ordering semantics,
+and help/error-help. Errors may leave partial output; atomic output and temporary
+file cleanup remain separate review items. Small inputs with the CLI's `-P`
+only exercise its serial fallback, which is why the C helper tests parallel
+execution directly with a smaller chunk threshold. These checks do not establish
+full-scale performance, resource usage, race freedom, or failure cleanup.
 Leak detection is explicitly disabled for this memory-access check because
 allocation leaks remain a separate review item. Broader sanitizer coverage
 will accompany the remaining fixes.

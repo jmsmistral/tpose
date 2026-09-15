@@ -4,6 +4,8 @@
 char* prefixGlobal = "";
 char* suffixGlobal = "";
 
+void testEofFile(const char* mode, const char* path, char* aggregation);
+
 static void check(int condition, const char* message) {
     if(!condition) {
         fprintf(stderr, "FAIL: %s\n", message);
@@ -88,9 +90,9 @@ static void testPartitionId(const char* widthArg) {
     check(strcmp(widthArg, "4999") == 0 || strcmp(widthArg, "5000") == 0,
           "partition test width");
     size_t width = (size_t) strtoul(widthArg, NULL, 10);
-    /* The partitioner starts its interior boundary at fileSize % chunkSize.
+    /* The partitioner starts its interior boundary at dataSize % chunkSize.
        Reserve virtual address space, touching only the rows at that boundary;
-       no GiB file is written or scanned. */
+       the helper uses a 64 KiB chunk size, with no large file needed. */
     size_t tail = 16384;
     size_t length = (size_t) TPOSE_IO_CHUNK_SIZE + tail;
     char* data = mmap(NULL, length, PROT_READ | PROT_WRITE,
@@ -123,6 +125,10 @@ int main(int argc, char** argv) {
     }
     if(argc == 3 && strcmp(argv[1], "partition-id") == 0) {
         testPartitionId(argv[2]);
+        return EXIT_SUCCESS;
+    }
+    if(argc == 5 && strcmp(argv[1], "eof") == 0) {
+        testEofFile(argv[2], argv[3], argv[4]);
         return EXIT_SUCCESS;
     }
     check(argc == 4, "usage: group-keys-test [group|id input-file sum|count|avg] or partition-id width");

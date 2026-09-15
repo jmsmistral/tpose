@@ -127,5 +127,6 @@ for mode in group id; do
 done
 
 . "$test_dir/limits.sh"
+. "$test_dir/eof.sh"
 
 printf 'Passed %s tests.\n' "$passed"
