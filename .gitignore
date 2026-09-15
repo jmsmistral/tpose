@@ -1,4 +1,6 @@
 /tpose
+/tpose-asan
+/tpose-asan.dSYM/
 /src/*.o
 /src/*.d
 .DS_Store

@@ -80,6 +80,11 @@ check_output 'comma delimiter' expected.csv input.csv -d, -i -I1 -G2 -N3
 check_output 'prefix and suffix' "$fixtures/id-affixes.tsv" \
     "$fixtures/input.tsv" -i -I1 -G2 -N3 -ppre_ -s_post
 
+# Longer header allocations and short group names exercise string termination
+# and cleanup of a header with many unused slots (checked by test-asan).
+check_output 'header and group string storage' "$fixtures/string-storage-expected.tsv" \
+    "$fixtures/string-storage.tsv" -Icustomer_identifier -Gproduct_category -Ntransaction_amount
+
 "$binary" "$fixtures/input.tsv" result.tsv -i -I1 -G2 -N3 > actual 2> stderr || fail 'output file (exit status)'
 [ ! -s actual ] || fail 'output file wrote to stdout'
 [ ! -s stderr ] || fail 'output file (unexpected diagnostic)'

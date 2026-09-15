@@ -28,6 +28,16 @@ unsigned int fileChunks;
 off_t partitions[1000];
 TposeOutputFile* tempFileArray[1000];
 
+/* Copy the terminating zero as well as the field contents. */
+static char* tposeIODuplicateString(const char* value) {
+	char* copy = strdup(value);
+	if(copy == NULL) {
+		fprintf(stderr, "Error: Cannot allocate field string memory\n");
+		exit(EXIT_FAILURE);
+	}
+	return copy;
+}
+
 	
 
 /** 
@@ -216,8 +226,10 @@ TposeHeader* tposeIOHeaderAlloc(
 	}
 
 	if(mutateHeader) {
-		if((tposeHeader->fields = (char**) malloc(maxFields * sizeof(char*))) == NULL ) {
+		// Unused slots must be NULL because cleanup visits the full capacity.
+		if((tposeHeader->fields = calloc(maxFields, sizeof(char*))) == NULL ) {
 			fprintf(stderr, "Error: Cannot allocate header fields memory\n");
+			free(tposeHeader);
 			return NULL;
 		}
 	}
@@ -658,17 +670,16 @@ TposeHeader* tposeIOReadInputHeader(
 		inputFile->dataAddr+=1; // Make sure we're not pointing at the NULL 
 
 		// Create a copy of the NULL terminated string (as strsep/strtok_r modifies this)
-		rowtok = strdup(inputFile->fileAddr);
+		rowtok = tposeIODuplicateString(inputFile->fileAddr);
 		
 		// Read header fields
-		fieldtok = strtok_r(rowtok, &(inputFile->fieldDelimiter), &fieldSavePtr);
+		char delimiters[] = {(char) inputFile->fieldDelimiter, '\0'};
+		fieldtok = strtok_r(rowtok, delimiters, &fieldSavePtr);
 		if(fieldtok == NULL) return NULL;
-		tempString = malloc(strlen(fieldtok) * sizeof(char));
-		strcpy(tempString, fieldtok);
+		tempString = tposeIODuplicateString(fieldtok);
 		*(header->fields) = tposeIOLowerCase(tempString);
-		for(fieldCount = 1; (fieldtok = strtok_r(NULL, &(inputFile->fieldDelimiter), &fieldSavePtr)) != NULL; ) {
-			tempString = malloc(strlen(fieldtok) * sizeof(char));
-			strcpy(tempString, fieldtok);
+		for(fieldCount = 1; (fieldtok = strtok_r(NULL, delimiters, &fieldSavePtr)) != NULL; ) {
+			tempString = tposeIODuplicateString(fieldtok);
 			*(header->fields+(fieldCount++)) = tposeIOLowerCase(tempString);
 		}
 		
@@ -785,8 +796,7 @@ void tposeIOUniqueGroups(
 						fprintf(stderr, "Error: Cannot insert value into btree\n");
 
 					// Insert into TposeHeader object
-					allocString = malloc(strlen(tempString) * sizeof(char));
-					strcpy(allocString, tempString);
+					allocString = tposeIODuplicateString(tempString);
 					*(header->fields+(uniqueGroupCount++)) = allocString;
 					header->numFields = uniqueGroupCount; // Update number of fields in header
 				}
@@ -1653,8 +1663,7 @@ void* tposeIOUniqueGroupsMap(
 					}
 
 					// Insert into header
-					allocString = malloc(strlen(tempString) * sizeof(char));
-					strcpy(allocString, tempString);
+					allocString = tposeIODuplicateString(tempString);
 					*(header->fields+(uniqueGroupCount++)) = allocString;
 				}
 
@@ -1744,8 +1753,7 @@ void tposeIOUniqueGroupsReduce(
 					}
 
 					// Insert into TposeHeader object
-					allocString = malloc(strlen(tempString) * sizeof(char));
-					strcpy(allocString, tempString);
+					allocString = tposeIODuplicateString(tempString);
 					*(header->fields+(uniqueGroupCount++)) = allocString;
 				}
 

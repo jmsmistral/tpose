@@ -15,7 +15,7 @@ src = $(wildcard src/*.c)
 obj = $(src:.c=.o)
 dep = $(obj:.o=.d)
 
-.PHONY: all test clean install uninstall check-compiler
+.PHONY: all test test-asan clean install uninstall check-compiler
 all: tpose
 
 # Apple supplies Clang under the name gcc. Fail with a useful explanation.
@@ -36,6 +36,14 @@ src/%.o: src/%.c | check-compiler
 test: tpose
 	sh tests/run.sh ./tpose
 
+# Keep the diagnostic binary separate from the normal build and its objects.
+tpose-asan: $(src) $(wildcard src/*.h) Makefile | check-compiler
+	$(CC) $(CPPFLAGS) -D_FILE_OFFSET_BITS=64 -std=gnu11 $(CFLAGS) -O1 -g -fsanitize=address -fno-omit-frame-pointer $(LDFLAGS) -o $@ $(src) -pthread $(LDLIBS)
+
+# Leak cleanup is a separate review item; check invalid memory access here.
+test-asan: tpose-asan
+	ASAN_OPTIONS=detect_leaks=0 sh tests/run.sh ./tpose-asan
+
 install: tpose
 	install -d "$(DESTDIR)$(PREFIX)/bin"
 	install -m 755 tpose "$(DESTDIR)$(PREFIX)/bin/tpose"
@@ -44,6 +52,7 @@ uninstall:
 	rm -f "$(DESTDIR)$(PREFIX)/bin/tpose"
 
 clean:
-	rm -f $(obj) $(dep) tpose
+	rm -f $(obj) $(dep) tpose tpose-asan
+	rm -rf tpose-asan.dSYM
 
 -include $(dep)

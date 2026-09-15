@@ -46,8 +46,8 @@ make clean
 make CC=gcc CFLAGS='-O0 -g -Wall -Wextra'
 ```
 
-You can run `./tpose` directly without installing it. Optional installation
-defaults to `/usr/local/bin` and builds the executable first:
+You can run `./tpose` directly without installing it.
+Installation defaults to `/usr/local/bin` and builds the executable first:
 
 ```sh
 make install PREFIX="$HOME/.local"
@@ -61,10 +61,8 @@ macOS). Packaging tools can stage an installation with `DESTDIR`, for example
 
 ## Tests and CI ##
 
-`make test` builds tpose and runs a small shell smoke suite using standard Unix
-utilities. It checks the README's aggregation examples, CLI version output,
-missing-input handling, and output files. See [tests/README.md](tests/README.md)
-for coverage and how to extend it.
+`make test` builds tpose and runs a small shell smoke suite.
+See [tests/README.md](tests/README.md) for more info.
 
 ## Running tpose ##
 
