@@ -1,0 +1,9 @@
+Customer_id	Revenue_group	Amount
+1	rev_A	2
+1	rev_B	3
+2	rev_C	6
+3	rev_B	7
+3	rev_B	2
+3	rev_C	9
+4	rev_A	8
+4	rev_A	3

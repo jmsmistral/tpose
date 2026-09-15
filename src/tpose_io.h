@@ -32,8 +32,6 @@
 	/**
 	 ** Implementation defs & limits
 	 **/
-	#define _FILE_OFFSET_BITS 64 // Enable long file access
-
 	#define TPOSE_IO_MAX_LINE 1048576
 	#define TPOSE_IO_MAX_FIELDS 5000
 	#define TPOSE_IO_MAX_FIELD_WIDTH 5000
@@ -166,7 +164,7 @@
 	#define TPOSE_IO_PARTITION_GROUP 0
 	#define TPOSE_IO_PARTITION_ID 1
 
-	BTree* btreeGlobal; // Needs to persist between computing unique groups, and aggregating values
+	extern BTree* btreeGlobal; // Needs to persist between computing unique groups, and aggregating values
 
 	typedef struct {
 		unsigned int threadId;
@@ -174,8 +172,8 @@
 		TposeHeader* header;
 	} TposeThreadData;
 
-	TposeThreadData** threadDataArray;
-	TposeThreadData* threadData;
+	extern TposeThreadData** threadDataArray;
+	extern TposeThreadData* threadData;
 
 	typedef struct {
 		unsigned int threadId;
@@ -183,13 +181,13 @@
 		TposeAggregator* aggregator;
 	} TposeThreadAggregator;
 
-	TposeThreadAggregator** threadAggregatorArray;
-	TposeThreadAggregator* threadAggregator;
+	extern TposeThreadAggregator** threadAggregatorArray;
+	extern TposeThreadAggregator* threadAggregator;
 
-	unsigned int fileChunks; // Number of file chunks
-	off_t partitions[1000];
+	extern unsigned int fileChunks; // Number of file chunks
+	extern off_t partitions[1000];
 	
-	TposeOutputFile* tempFileArray[1000];
+	extern TposeOutputFile* tempFileArray[1000];
 
 
 	// functions
@@ -214,4 +212,3 @@
 
 
 #endif /* TPOSE_IO_H */
-

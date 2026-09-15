@@ -6,15 +6,65 @@ Read this article ([medium](https://medium.com/@jmsmistral/on-transposing-data-8
 
 ## Building tpose ##
 
-* Dependencies: gcc, make
+Dependencies: **GNU GCC** with GNU C11 support, **GNU Make**, and the platform's
+standard C/POSIX headers and libraries.
 
-Most of you will just need to download or clone the source code and do:
+On Linux, install GCC and Make using your distribution's package manager if
+needed (for example, `sudo apt install gcc make` on Debian/Ubuntu). Then:
 
-```bash
-$ cd tpose
-$ make && sudo make install
+```sh
+make
+make test
+./tpose --version
 ```
-In case you get issues, check [here](https://bitbucket.org/jmsmistral/tpose/wiki/Home) for info on how to get set-up and troubleshooting build issues.
+
+On macOS, install Apple's Command Line Tools (`xcode-select --install`) if
+needed for Make and the system SDK, and install GNU GCC with
+`brew install gcc`. Apple's `/usr/bin/gcc` invokes Clang, so select the
+versioned Homebrew executable explicitly. For example, with GCC 16:
+
+```sh
+make CC=gcc-16
+make test CC=gcc-16
+./tpose --version
+```
+
+Use the version installed on your machine. You can find Homebrew's executable
+with `ls "$(brew --prefix gcc)"/bin/gcc-[0-9]*`. The build checks the selected
+compiler and reports an error if it is Clang. Set `CC` in the environment or
+pass it to Make; use the same setting for build, test, and install commands.
+
+The Makefile supports `CC`, `CPPFLAGS`, `CFLAGS`, `LDFLAGS`, and `LDLIBS`.
+Defaults enable optimization, debug symbols, and compiler warnings. Existing
+warnings are not yet treated as errors while the older code is being repaired.
+Header dependencies are generated automatically. Run `make clean` before
+switching compilers or flags, since Make does not track command-line changes.
+For example:
+
+```sh
+make clean
+make CC=gcc CFLAGS='-O0 -g -Wall -Wextra'
+```
+
+You can run `./tpose` directly without installing it. Optional installation
+defaults to `/usr/local/bin` and builds the executable first:
+
+```sh
+make install PREFIX="$HOME/.local"
+make uninstall PREFIX="$HOME/.local"
+```
+
+Add `$HOME/.local/bin` to your `PATH` to invoke that installation as `tpose`.
+For a system-wide installation, use `sudo make install` (and specify `CC` on
+macOS). Packaging tools can stage an installation with `DESTDIR`, for example
+`make install DESTDIR=/tmp/tpose-package PREFIX=/usr`.
+
+## Tests and CI ##
+
+`make test` builds tpose and runs a small shell smoke suite using standard Unix
+utilities. It checks the README's aggregation examples, CLI version output,
+missing-input handling, and output files. See [tests/README.md](tests/README.md)
+for coverage and how to extend it.
 
 ## Running tpose ##
 
@@ -208,4 +258,3 @@ customer_id  xxx_rev_A_yyy  xxx_rev_B_yyy  xxx_rev_C_yyy
 ```
 
 Remember, tpose is free software (licensed under GPLv3)!
-

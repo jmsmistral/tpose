@@ -19,9 +19,14 @@
 #include "tpose_io.h"
 
 unsigned char rowDelimiter = '\n';
-char* prefixGlobal;
-char* suffixGlobal;
-extern int errno;
+BTree* btreeGlobal;
+TposeThreadData** threadDataArray;
+TposeThreadData* threadData;
+TposeThreadAggregator** threadAggregatorArray;
+TposeThreadAggregator* threadAggregator;
+unsigned int fileChunks;
+off_t partitions[1000];
+TposeOutputFile* tempFileArray[1000];
 
 	
 

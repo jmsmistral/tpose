@@ -1,9 +1,6 @@
-tpose
-checkHash.sh
-data*
-test*
-*.txt
-*.o
+/tpose
+/src/*.o
+/src/*.d
 .DS_Store
 .DS_Store?
 ._*
