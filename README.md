@@ -1,5 +1,7 @@
 # Welcome to tpose! #
 
+[![GCC build and tests](https://github.com/jmsmistral/tpose/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/jmsmistral/tpose/actions/workflows/ci.yml?query=branch%3Amaster)
+
 tpose is a UNIX-based terminal program for transposing delimited text-files.
 
 Read this article ([medium](https://medium.com/@jmsmistral/on-transposing-data-884a04a8c1bf) or [pdf](http://jonathansacramento.com/papers/on_transposing_data.pdf)) to learn more about how transposes work (and tpose!).

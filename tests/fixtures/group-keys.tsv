@@ -1,0 +1,14 @@
+id	group	amount
+1	B<	2
+1	abcdefghijklmnop	3
+1	Aa	5
+1	B<	7
+1	abcdefghijklmnop	9
+1	Az	29
+2	Aa	11
+2	B<	13
+2	abcdefghijklmnop	15
+2	aa	17
+2	abcdefghijklmnop_suffix	19
+2	Aa	23
+2	BU	31

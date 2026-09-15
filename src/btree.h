@@ -44,8 +44,6 @@
 #define MIN_CHILDREN MIN_DEGREE
 #define MAX_CHILDREN 2*MIN_DEGREE
 
-#define BTREE_NODE_SIZE 456 /* Given MIN_DEGREE=6: (BTreeKey * 11) + (off_t * 12) + (unsigned int * 2) */
-
 #define LEAF_TRUE 1
 #define LEAF_FALSE 0
 
@@ -56,7 +54,7 @@
  **/
 typedef struct {
     unsigned int isUnlinked; /* marks key as deleted in data set */
-    off_t keyValue;
+    const char* keyValue; /* borrowed full string; owner must keep it alive and unchanged until btreeFree */
     off_t dataOffset; /* offset of data record in a given data file */
     off_t dataLength; /* length of data record in bytes */
 } BTreeKey;
@@ -131,18 +129,18 @@ void btreeQueueFree(BTreeQueue** queue);
 void btreeQueueNodeFree(BTreeQueueNode** queueNode);
 
 /* btree operations */
-BTreeKey* btreeSearch(BTree* btree, BTreeNode* node, off_t key);
+BTreeKey* btreeSearch(BTree* btree, BTreeNode* node, const char* key);
 int btreeInsert(BTree* btree, BTreeKey* key);
 int btreeInsertNonFull(BTree* btree, BTreeNode* node, BTreeKey* key);
 int btreeSplitChild(BTree* btree, BTreeNode* x, const unsigned int i, BTreeNode* y);
-int btreeDelete(BTree* btree, off_t key);
+int btreeDelete(BTree* btree, const char* key);
 
 /* btree utils */
 void btreeForEach(BTree* btree, queueNodeCallback callbackPtr);
 BTreeQueue* populateBTreeQueueBFS(BTree* btree);
 void setQueueNode(BTreeQueueNode*, BTreeNode*, BTreeNode*, unsigned int, unsigned int);
 void addQueueNode(BTreeQueue*, BTreeQueueNode*);
-void btreeSetKeyValue(BTreeKey* key, off_t keyValue, off_t dataOffset, off_t dataLength);
+void btreeSetKeyValue(BTreeKey* key, const char* keyValue, off_t dataOffset, off_t dataLength);
 void btreePrintNode(BTreeNode* node, const char* label, const unsigned int visited);
 
 /* btree macros */

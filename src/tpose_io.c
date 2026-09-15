@@ -718,9 +718,7 @@ void tposeIOUniqueGroups(
 	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
 	off_t uniqueGroupCount = 0; // Used to index array of header ptrs
 	off_t groupCharCount = 0; 
-	off_t hashCharCount = 0; 
 	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashValue = 0; 
 	off_t fileSize = (tposeQuery->inputFile)->fileSize; 
 	off_t rFileSize = fileSize; // Remaining file size
 	unsigned int chunks = 1; // Number of file chunks
@@ -780,30 +778,26 @@ void tposeIOUniqueGroups(
 				}
 				tempString[groupCharCount] = '\0'; // Null-terminate string
 
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
 
 				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) == NULL) {
+				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, tempString)) == NULL) {
 
-					// Check for collisions - print only when we add a unique group
-					debug_print("tposeIOgetUniqueGroups(): New group value found = '");
-					debug_print("tposeIOgetUniqueGroups(): row %u = %s\t%ld\t%u\n", rowCount, tempString, hashValue, uniqueGroupCount);
+					// Record each full group name once
+					debug_print("tposeIOUniqueGroups(): group = %s\n", tempString);
 
-					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
+					// The header owns this stable string; the tree borrows it.
+					allocString = tposeIODuplicateString(tempString);
+					btreeSetKeyValue(key, allocString, uniqueGroupCount, 0);
 					if(btreeInsert(btree, key) == -1)
 						fprintf(stderr, "Error: Cannot insert value into btree\n");
 
 					// Insert into TposeHeader object
-					allocString = tposeIODuplicateString(tempString);
 					*(header->fields+(uniqueGroupCount++)) = allocString;
 					header->numFields = uniqueGroupCount; // Update number of fields in header
 				}
 
 				// Reset variables (
 				groupCharCount = 0;
-				hashValue = 0;
 				
 				if(*fieldSavePtr == fieldDelimiter) {
 					--fieldSavePtr;
@@ -953,8 +947,6 @@ void tposeIOTransposeGroup(
 	// Counters & limits
 	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
 	unsigned int fieldCharCount = 0;
-	unsigned int hashCharCount = 0; 
-	off_t hashValue = 0; 
 	off_t totalCharCount = 0; // mmap files are page aligned, so we end-up reading garbage after file data ends
 	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
 	off_t fileSize = (tposeQuery->inputFile)->fileSize;
@@ -1026,19 +1018,15 @@ void tposeIOTransposeGroup(
 				}
 				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
 
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
 
 				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) != NULL) {
+				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, groupTempString)) != NULL) {
 					groupFoundFlag = 1; // Flag group field as found
 					groupFieldIndex = resultKey->dataOffset;
 				}
 
 				// Reset variables
 				fieldCharCount = 0;
-				hashValue = 0;
 				
 				if(*fieldSavePtr == fieldDelimiter) {
 					--fieldSavePtr;
@@ -1126,8 +1114,6 @@ void tposeIOTransposeGroupId(
 	int ctr; // Iterates over group fields to calculate average values
 	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
 	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashCharCount = 0; 
-	off_t hashValue = 0; 
 	off_t fileSize = (tposeQuery->inputFile)->fileSize;
 	off_t rFileSize = fileSize;
 	unsigned int chunks = 1; // Number of file chunks
@@ -1221,19 +1207,15 @@ void tposeIOTransposeGroupId(
 				}
 				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
 
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
 
 				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) != NULL) {
+				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, groupTempString)) != NULL) {
 					groupFoundFlag = 1; // Flag group field as found
 					groupFieldIndex = resultKey->dataOffset; // Is used to correctly order aggregates
 				}
 
 				// Reset variables
 				fieldCharCount = 0;
-				hashValue = 0;
 				
 				if(*fieldSavePtr == fieldDelimiter) {
 					--fieldSavePtr;
@@ -1607,9 +1589,7 @@ void* tposeIOUniqueGroupsMap(
 	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
 	off_t uniqueGroupCount = 0; // Used to index array of header ptrs
 	off_t groupCharCount = 0; 
-	off_t hashCharCount = 0; 
 	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashValue = 0; 
 
 
 	// Init with ptr to second row (where data starts)
@@ -1646,30 +1626,26 @@ void* tposeIOUniqueGroupsMap(
 				}
 				tempString[groupCharCount] = '\0';
 
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
 
 				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, hashValue)) == NULL) {
+				if( (resultKey = (BTreeKey*) btreeSearch(btree, btree->root, tempString)) == NULL) {
 
-					// Check for collisions - print only when we add a unique group
-					debug_print("tposeIOgetUniqueGroups(): New group found = '");
-					debug_print("tposeIOgetUniqueGroups(): row=%u / field=%u = %s\thash=%ld\tuniqueGroupCount=%u\n", rowCount, fieldCount, tempString, hashValue, uniqueGroupCount);
+					// Record each full group name once
+					debug_print("tposeIOUniqueGroups(): group = %s\n", tempString);
 
-					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
+					// The header owns this stable string; the tree borrows it.
+					allocString = tposeIODuplicateString(tempString);
+					btreeSetKeyValue(key, allocString, uniqueGroupCount, 0);
 					if(btreeInsert(btree, key) == -1) {
 						fprintf(stderr, "Error: Cannot insert value into btree\n");
 					}
 
 					// Insert into header
-					allocString = tposeIODuplicateString(tempString);
 					*(header->fields+(uniqueGroupCount++)) = allocString;
 				}
 
 				// Reset variables
 				groupCharCount = 0;
-				hashValue = 0;
 				
 				if(*fieldSavePtr == fieldDelimiter) {
 					--fieldSavePtr;
@@ -1710,9 +1686,7 @@ void tposeIOUniqueGroupsReduce(
 	unsigned int mutateHeader = 1; // Allow for header row to be modified
 	off_t uniqueGroupCount = 0; // Used to index array of header ptrs
 	off_t groupCharCount = 0; 
-	off_t hashCharCount = 0; 
 	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashValue = 0; 
 
 	// Temp allocs
 	BTreeKey* key = btreeKeyAlloc();
@@ -1740,26 +1714,23 @@ void tposeIOUniqueGroupsReduce(
 				}
 				tempString[groupCharCount] = '\0';
 
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= groupCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) tempString[hashCharCount];
 
 				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, hashValue)) == NULL) {
+				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, tempString)) == NULL) {
 
-					btreeSetKeyValue(key, hashValue, uniqueGroupCount, 0);
+					// The header owns this stable string; the tree borrows it.
+					allocString = tposeIODuplicateString(tempString);
+					btreeSetKeyValue(key, allocString, uniqueGroupCount, 0);
 					if(btreeInsert(btreeGlobal, key) == -1) {
 						fprintf(stderr, "Error: Cannot insert value into btree\n");
 					}
 
 					// Insert into TposeHeader object
-					allocString = tposeIODuplicateString(tempString);
 					*(header->fields+(uniqueGroupCount++)) = allocString;
 				}
 
 				// Reset variables (
 				groupCharCount = 0;
-				hashValue = 0;
 		}
 	}
 
@@ -1864,9 +1835,7 @@ void* tposeIOTransposeGroupMap(
 	off_t rowCount = 2; // For debugging only
 	unsigned int fieldCount = 0; // Already pointing at the first field when loop starts 
 	unsigned int fieldCharCount = 0;
-	off_t hashCharCount = 0; 
 	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashValue = 0; 
 	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
 
 
@@ -1913,19 +1882,15 @@ void* tposeIOTransposeGroupMap(
 				}
 				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
 
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
 
 				// Insert into btree
-				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, hashValue)) != NULL) {
+				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, groupTempString)) != NULL) {
 					groupFoundFlag = 1; // Flag group field as found
 					groupFieldIndex = resultKey->dataOffset;
 				}
 
 				// Reset variables
 				fieldCharCount = 0;
-				hashValue = 0;
 				
 				if(*fieldSavePtr == fieldDelimiter) {
 					--fieldSavePtr;
@@ -2116,8 +2081,6 @@ void* tposeIOTransposeGroupIdMap(
 	int ctr; // Iterates over group fields to calculate average values
 	off_t groupFieldIndex = 0; // Holds index of group field in TposeHeader struct
 	off_t totalCharCount = 0; // Needed to stop reading at EOF (mmap files are page aligned, so we end-up reading garbage after file data ends)
-	off_t hashCharCount = 0; 
-	off_t hashValue = 0; 
 
 
 	// Init with ptr to second row (where data starts)
@@ -2191,19 +2154,15 @@ void* tposeIOTransposeGroupIdMap(
 				}
 				groupTempString[fieldCharCount] = '\0'; // Null-terminate string
 
-				// Convert char array to hash
-				for(hashCharCount = 0; hashCharCount <= fieldCharCount-1; ++hashCharCount)
-					hashValue = TPOSE_IO_HASH_MULT * hashValue + (unsigned char) groupTempString[hashCharCount];
 
 				// Insert into btreeGlobal
-				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, hashValue)) != NULL) {
+				if( (resultKey = (BTreeKey*) btreeSearch(btreeGlobal, btreeGlobal->root, groupTempString)) != NULL) {
 					groupFoundFlag = 1; // Flag group field as found
 					groupFieldIndex = resultKey->dataOffset; // Is used to correctly order aggregates
 				}
 
 				// Reset variables
 				fieldCharCount = 0;
-				hashValue = 0;
 				
 				if(*fieldSavePtr == fieldDelimiter) {
 					--fieldSavePtr;

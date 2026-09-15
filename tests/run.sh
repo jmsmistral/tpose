@@ -6,12 +6,21 @@ export LC_ALL
 
 test_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 binary=${1:-./tpose}
+key_binary=${2:-./tests/group-keys-test}
 case "$binary" in
     /*) ;;
     *) binary="$(pwd)/$binary" ;;
 esac
+case "$key_binary" in
+    /*) ;;
+    *) key_binary="$(pwd)/$key_binary" ;;
+esac
 if [ ! -x "$binary" ]; then
     printf 'Executable not found: %s\nRun make first.\n' "$binary" >&2
+    exit 1
+fi
+if [ ! -x "$key_binary" ]; then
+    printf 'Test executable not found: %s\nRun make test first.\n' "$key_binary" >&2
     exit 1
 fi
 
@@ -90,5 +99,31 @@ check_output 'header and group string storage' "$fixtures/string-storage-expecte
 [ ! -s stderr ] || fail 'output file (unexpected diagnostic)'
 diff -u "$fixtures/id-sum.tsv" result.tsv || fail 'output file (contents)'
 pass 'output file'
+
+"$key_binary" > actual 2> stderr || fail 'B-tree string keys'
+[ ! -s actual ] && [ ! -s stderr ] || fail 'B-tree string keys (unexpected output)'
+pass 'B-tree string keys across splits'
+
+for mode in group id; do
+    case "$mode" in
+        group) expected_prefix=group-keys; id_option= ;;
+        id) expected_prefix=id-group-keys; id_option=-I1 ;;
+    esac
+    for aggregation in sum count avg; do
+        expected="$fixtures/$expected_prefix-$aggregation.tsv"
+        # id_option is either empty or one fixed option, so splitting is intentional.
+        "$binary" "$fixtures/group-keys.tsv" -i $id_option -G2 -N3 "-a$aggregation" > actual 2> stderr || fail "$mode keys $aggregation (exit status)"
+        [ ! -s stderr ] || fail "$mode keys $aggregation (unexpected diagnostic)"
+        sed 's/-nan/nan/g' actual > normalized
+        diff -u "$expected" normalized || fail "$mode keys $aggregation (output)"
+        pass "$mode keys $aggregation"
+
+        "$key_binary" "$mode" "$fixtures/group-keys.tsv" "$aggregation" > actual 2> stderr || fail "parallel $mode keys $aggregation (exit status)"
+        [ ! -s stderr ] || fail "parallel $mode keys $aggregation (unexpected diagnostic)"
+        sed 's/-nan/nan/g' actual > normalized
+        diff -u "$expected" normalized || fail "parallel $mode keys $aggregation (output)"
+        pass "parallel $mode keys $aggregation"
+    done
+done
 
 printf 'Passed %s tests.\n' "$passed"

@@ -95,7 +95,7 @@ BTreeKey* btreeKeyAlloc(void) {
     }
 
     key->isUnlinked = 0;
-    key->keyValue = 0;
+    key->keyValue = NULL;
     key->dataOffset = 0;
     key->dataLength = 0;
     
@@ -281,18 +281,18 @@ void btreeQueueNodeFree(
 BTreeKey* btreeSearch(
    BTree* btree
    ,BTreeNode* node
-   ,off_t keyValue
+   ,const char* keyValue
 ) {
 
 	// Check if btree is empty
 	if(!btree->numKeys)
 		return NULL;
 
-   int i;
+   unsigned int i;
    debug_print("btreeSearch: node->numkeys = %u\n", node->numKeys);
-   for(i = 0; (i <= node->numKeys - 1) && (keyValue > node->key[i].keyValue ); i++);
-   debug_print("btreeSearch: i = %d\n", i);
-   if((i <= node->numKeys - 1) && (keyValue == node->key[i].keyValue) && (!node->key[i].isUnlinked)) {
+   for(i = 0; i < node->numKeys && strcmp(keyValue, node->key[i].keyValue) > 0; i++) {}
+   debug_print("btreeSearch: i = %u\n", i);
+   if(i < node->numKeys && strcmp(keyValue, node->key[i].keyValue) == 0 && !node->key[i].isUnlinked) {
       debug_print("btreeSearch: key found\n");
       return (BTreeKey*) &node->key[i];
    }
@@ -369,7 +369,7 @@ int btreeInsertNonFull(
     if(x->isLeaf) {
         debug_print("btreeInsertNonFull: node is a leaf!\n");
         
-        while (i>=0 && key->keyValue < x->key[i].keyValue) {
+        while (i>=0 && strcmp(key->keyValue, x->key[i].keyValue) < 0) {
             x->key[i+1] = x->key[i];
             i--;
         }
@@ -382,7 +382,7 @@ int btreeInsertNonFull(
     else {
         debug_print("btreeInsertNonFull: node is not a leaf...inserting into child!\n");
         /* Find correct index to insert key */
-        while (i>=0 && key->keyValue < x->key[i].keyValue)
+        while (i>=0 && strcmp(key->keyValue, x->key[i].keyValue) < 0)
             i--;
         i++;
         
@@ -394,7 +394,7 @@ int btreeInsertNonFull(
             btreeSplitChild(btree, x, i, child);
             btree->numNodes++; // only increment one in this case
 
-            if(key->keyValue > x->key[i].keyValue) {
+            if(strcmp(key->keyValue, x->key[i].keyValue) > 0) {
                 i++;
                 child = x->childPtr[i];
             }
@@ -465,19 +465,19 @@ int btreeSplitChild(
         /*printf("btreeSplitChild: x = [");
         int lo;
         for(lo=0; lo<x->numKeys; lo++) {
-            printf("%lu,", x->key[lo].keyValue);
+            printf("%s,", x->key[lo].keyValue);
         }
         printf("]\n");
 
         printf("btreeSplitChild: y = [");
         for(lo=0; lo<y->numKeys; lo++) {
-            printf("%lu,", y->key[lo].keyValue);
+            printf("%s,", y->key[lo].keyValue);
         }
         printf("]\n");
 
         printf("btreeSplitChild: z = [");
         for(lo=0; lo<z->numKeys; lo++) {
-            printf("%lu,", z->key[lo].keyValue);
+            printf("%s,", z->key[lo].keyValue);
         }
         printf("]\n"); */
 
@@ -495,7 +495,7 @@ int btreeSplitChild(
  **/
 int btreeDelete(
     BTree* btree
-    ,off_t key
+    ,const char* key
 ) {
 
 	printf("btreeDelete: KEY DELETED\n");
@@ -649,7 +649,7 @@ void addQueueNode(
  **/
 void btreeSetKeyValue(
     BTreeKey* key
-    ,off_t keyValue
+    ,const char* keyValue
     ,off_t dataOffset
     ,off_t dataLength
 ) {
@@ -679,7 +679,7 @@ void btreePrintNode(
     debug_print("%s = [", label);
     int i;
     for(i=0; i<node->numKeys; i++) {
-        debug_print("%lu,", node->key[i].keyValue);
+        debug_print("%s,", node->key[i].keyValue);
     }
     if(visited){
         debug_print("] | visited = %u\n", visited);
@@ -705,9 +705,9 @@ void btreeCBPrintNode(
     printf("Level %u: node = [",qnode->nodeLevel);
     for(k=0; k<qnode->nodePtr->numKeys; k++) {
         if(!qnode->nodePtr->key[k].isUnlinked)
-            printf("%lu,", qnode->nodePtr->key[k].keyValue);
+            printf("%s,", qnode->nodePtr->key[k].keyValue);
         else
-            printf("*%lu,", qnode->nodePtr->key[k].keyValue); /* mark unlinked nodes with * */
+            printf("*%s,", qnode->nodePtr->key[k].keyValue); /* mark unlinked nodes with * */
     }
     printf("]\n");
 
@@ -727,8 +727,6 @@ void btreeCBFreeNode(
     assert(qnode->nodePtr == NULL);
 
 }
-
-
 
 
 
