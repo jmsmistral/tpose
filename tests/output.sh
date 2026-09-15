@@ -130,7 +130,8 @@ for mode in simple group id; do
         "$key_binary" output broken-pipe "$binary" "$input" "$@"
     no_staged_output
 done
-output_error 'closed stdout fails' 'Error:' "$key_binary" output closed-stdout "$binary" output-input.tsv
+output_error 'read-only stdout fails' 'Error: Cannot' "$key_binary" output read-only-stdout "$binary" output-input.tsv
+output_error 'closed stdout fails' "Cannot inspect output 'stdout'" "$key_binary" output closed-stdout output-input.tsv
 output_error 'fclose failure propagates' 'Cannot flush or close output stream' "$key_binary" output close
 output_error 'parallel read failure propagates' 'Cannot read parallel output stream' "$key_binary" output parallel-read
 

@@ -165,7 +165,10 @@ read, write, flush, and close failures rather than clearing error indicators.
 parser failures, and write failures; successful contents and permission modes;
 aliases and special paths; destination changes before publication; and staged
 file cleanup. `output.c` uses a child with a four-byte file-size limit, a broken
-pipe, and invalid descriptors to reproduce I/O failures portably. Diagnostics
+pipe, and read-only stdout to reproduce CLI I/O failures portably. The stdout
+descriptor stays occupied across exec so runtime startup cannot reuse it.
+A separate probe closes stdout after startup and input opening, immediately
+before calling the production destination check. Diagnostics
 are relayed through a pipe so the file-size limit cannot truncate them. Tests
 also exercise input/output named `temp0.txt`, unrelated `temp1.txt`, failed
 parallel writes, and concurrent parallel invocations in the same directory.

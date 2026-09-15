@@ -33,8 +33,13 @@ static void runFailureChild(const char* mode, char** command) {
             check(dup2(output[1], STDOUT_FILENO) >= 0, "redirect output");
             close(output[1]);
         } else {
-            check(strcmp(mode, "closed-stdout") == 0, "fault mode");
-            close(STDOUT_FILENO);
+            check(strcmp(mode, "read-only-stdout") == 0, "fault mode");
+            /* Reserve fd 1 across exec: a closed descriptor could be reused
+               by the loader or sanitizer before the CLI starts. */
+            int output = open("/dev/null", O_RDONLY);
+            check(output >= 0, "open read-only stdout");
+            check(dup2(output, STDOUT_FILENO) >= 0, "redirect read-only stdout");
+            if(output != STDOUT_FILENO) close(output);
         }
         execv(command[0], command);
         _exit(99);
@@ -56,9 +61,21 @@ static void runFailureChild(const char* mode, char** command) {
 void testOutput(int argc, char** argv) {
     const char* mode = argv[2];
     if(strcmp(mode, "limited") == 0 || strcmp(mode, "broken-pipe") == 0 ||
-       strcmp(mode, "closed-stdout") == 0) {
+       strcmp(mode, "read-only-stdout") == 0) {
         check(argc >= 4, "fault command arguments");
         runFailureChild(mode, &argv[3]);
+    } else if(strcmp(mode, "closed-stdout") == 0) {
+        check(argc == 4, "closed stdout arguments");
+        TposeInputFile* input = tposeIOOpenInputFile(argv[3], '\t', 0);
+        check(input != NULL, "open closed stdout input");
+        /* Close after runtime initialization and input opening. No intervening
+           open can take fd 1 before the production destination check. */
+        check(close(STDOUT_FILENO) == 0, "close stdout descriptor");
+        TposeOutputFile* output = tposeIOOpenDestination(input, "stdout", '\t');
+        int failed = output == NULL;
+        if(output) tposeIOOutputFileFree(&output);
+        check(tposeIOCloseInputFile(input) == 0, "close probe input");
+        exit(failed ? 1 : 0);
     } else if(strcmp(mode, "close") == 0) {
         FILE* stream = tmpfile();
         check(stream != NULL, "create close probe");
