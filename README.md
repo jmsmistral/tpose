@@ -56,11 +56,6 @@ make clean
 make CC=gcc CFLAGS='-O0 -g -Wall -Wextra'
 ```
 
-## Tests and CI ##
-
-`make test` builds tpose and runs a small shell smoke suite.
-See [tests/README.md](tests/README.md) for more info.
-
 
 ## Running tpose ##
 
