@@ -4,12 +4,15 @@ tpose is a UNIX-based terminal program for transposing delimited text-files.
 
 Read this article ([medium](https://medium.com/@jmsmistral/on-transposing-data-884a04a8c1bf) or [pdf](http://jonathansacramento.com/papers/on_transposing_data.pdf)) to learn more about how transposes work (and tpose!).
 
+
 ## Building tpose ##
 
-Dependencies: **GNU GCC** with GNU C11 support, **GNU Make**, and the platform's
-standard C/POSIX headers and libraries.
+Dependencies:
+- **GNU GCC** with GNU C11 support
+- **GNU Make**
 
-On Linux, install GCC and Make using your distribution's package manager if
+#### GNU/Linux
+Install GCC and Make using your distribution's package manager if
 needed (for example, `sudo apt install gcc make` on Debian/Ubuntu). Then:
 
 ```sh
@@ -18,9 +21,10 @@ make test
 ./tpose --version
 ```
 
-On macOS, install Apple's Command Line Tools (`xcode-select --install`) if
+#### MacOS
+Install Apple's Command Line Tools (`xcode-select --install`) if
 needed for Make and the system SDK, and install GNU GCC with
-`brew install gcc`. Apple's `/usr/bin/gcc` invokes Clang, so select the
+`brew install gcc`. Note: Apple's `/usr/bin/gcc` invokes Clang, so select the
 versioned Homebrew executable explicitly. For example, with GCC 16:
 
 ```sh
@@ -29,22 +33,7 @@ make test CC=gcc-16
 ./tpose --version
 ```
 
-Use the version installed on your machine. You can find Homebrew's executable
-with `ls "$(brew --prefix gcc)"/bin/gcc-[0-9]*`. The build checks the selected
-compiler and reports an error if it is Clang. Set `CC` in the environment or
-pass it to Make; use the same setting for build, test, and install commands.
-
-The Makefile supports `CC`, `CPPFLAGS`, `CFLAGS`, `LDFLAGS`, and `LDLIBS`.
-Defaults enable optimization, debug symbols, and compiler warnings. Existing
-warnings are not yet treated as errors while the older code is being repaired.
-Header dependencies are generated automatically. Run `make clean` before
-switching compilers or flags, since Make does not track command-line changes.
-For example:
-
-```sh
-make clean
-make CC=gcc CFLAGS='-O0 -g -Wall -Wextra'
-```
+#### Installing
 
 You can run `./tpose` directly without installing it.
 Installation defaults to `/usr/local/bin` and builds the executable first:
@@ -59,10 +48,19 @@ For a system-wide installation, use `sudo make install` (and specify `CC` on
 macOS). Packaging tools can stage an installation with `DESTDIR`, for example
 `make install DESTDIR=/tmp/tpose-package PREFIX=/usr`.
 
+Run `make clean` before switching compilers or flags.
+For example:
+
+```sh
+make clean
+make CC=gcc CFLAGS='-O0 -g -Wall -Wextra'
+```
+
 ## Tests and CI ##
 
 `make test` builds tpose and runs a small shell smoke suite.
 See [tests/README.md](tests/README.md) for more info.
+
 
 ## Running tpose ##
 
